@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Maker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Schedule Maker</h1>
+        <div id="auth-container">
+            <button id="login-btn">Login with Google</button>
+            <button id="logout-btn" style="display:none;">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <div id="user-info" style="display:none;">
+            <p>Welcome, <span id="user-name"></span>!</p>
+        </div>
+        
+        <h2>Your Upcoming Calendar Events</h2>
+        <div id="calendar-events" class="container">
+            <p id="loading-message">Please log in to see your calendar events.</p>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html> 
