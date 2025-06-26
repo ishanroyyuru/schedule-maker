@@ -140,6 +140,30 @@ class CalendarConnection {
       throw new Error('Failed to find expired tokens');
     }
   }
+
+  static async findByCalendarId(calendarId) {
+    const query = 'SELECT * FROM calendar_connections WHERE calendar_id = $1';
+    
+    try {
+      const result = await db.query(query, [calendarId]);
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding calendar connections by calendar ID:', error);
+      throw new Error('Failed to find calendar connections');
+    }
+  }
+
+  static async findAll() {
+    const query = 'SELECT * FROM calendar_connections ORDER BY created_at DESC';
+    
+    try {
+      const result = await db.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('Error finding all calendar connections:', error);
+      throw new Error('Failed to find calendar connections');
+    }
+  }
 }
 
 module.exports = CalendarConnection; 

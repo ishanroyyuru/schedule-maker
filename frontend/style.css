@@ -1,10 +1,15 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.6;
-    margin: 0;
-    padding: 0;
-    background-color: #f4f7f6;
     color: #333;
+    background-color: #f4f7f6;
 }
 
 header {
@@ -162,6 +167,103 @@ button:hover {
     margin: 0.5rem 0;
 }
 
+/* Time period selector styles */
+.time-period-selector {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.period-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.period-btn {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.period-btn:hover {
+    background-color: #d5dbdb;
+    border-color: #95a5a6;
+}
+
+.period-btn.active {
+    background-color: #3498db;
+    color: white;
+    border-color: #2980b9;
+}
+
+.period-btn.active:hover {
+    background-color: #2980b9;
+}
+
+.custom-date-range {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.date-inputs {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.date-input {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.date-input label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.date-input input[type="date"] {
+    padding: 8px 12px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+}
+
+.date-input input[type="date"]:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.apply-custom-btn {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.apply-custom-btn:hover {
+    background-color: #229954;
+}
+
 /* Error and information message styling */
 .error-message {
     background: #fee;
@@ -239,4 +341,157 @@ button:hover {
 
 .no-events li {
     margin: 0.5rem 0;
+}
+
+/* Calendar header and sync controls */
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.calendar-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.3rem;
+}
+
+.sync-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.sync-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.sync-btn:hover {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.sync-btn.force {
+    background-color: #e67e22;
+}
+
+.sync-btn.force:hover {
+    background-color: #d35400;
+}
+
+.sync-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Event attendees styling */
+.event-attendees {
+    color: #7f8c8d;
+    font-size: 0.85rem;
+    margin: 0.5rem 0;
+    font-style: italic;
+}
+
+/* Loading state for sync */
+.sync-btn.loading {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.sync-btn.loading:hover {
+    background-color: #95a5a6;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Events list container */
+.events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Alert message styles */
+.alert {
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-weight: 500;
+    border-left: 4px solid;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+/* Responsive design for sync controls */
+@media (max-width: 768px) {
+    .calendar-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .sync-controls {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    
+    .sync-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    .period-buttons {
+        flex-wrap: wrap;
+    }
+
+    .period-btn {
+        flex: 1;
+        min-width: 80px;
+        text-align: center;
+    }
+
+    .date-inputs {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .date-input {
+        width: 100%;
+    }
+
+    .apply-custom-btn {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
 } 

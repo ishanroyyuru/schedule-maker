@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 await fetchCalendarEvents();
-                await fetchAvailableCalendars();
+                await fetchCalendarConnections();
             } else {
                 loginBtn.style.display = 'block';
                 logoutBtn.style.display = 'none';
@@ -105,182 +105,411 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('Event listeners attached');
 
-    const fetchAvailableCalendars = async () => {
+    const fetchCalendarConnections = async () => {
         try {
             const token = localStorage.getItem('jwt_token');
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
             
-            const response = await fetch(`${API_BASE_URL}/calendars/list`, { headers });
+            const response = await fetch(`${API_BASE_URL}/calendars/connections`, { headers });
             const data = await response.json();
 
-            if (data.error) {
-                console.error('Calendar access error:', data.error);
+            if (!data.success) {
+                console.error('Failed to fetch calendar connections:', data.error);
                 return;
             }
 
-            if (!data.calendars || data.calendars.length === 0) {
-                console.log('No calendars accessible:', data.message);
-                return;
-            }
-
-            console.log('Available calendars:', data.calendars.map(cal => cal.summary));
+            console.log('Calendar connections:', data.connections);
         } catch (error) {
-            console.error('Failed to fetch calendars:', error);
+            console.error('Failed to fetch calendar connections:', error);
         }
     };
 
-    const fetchCalendarEvents = async () => {
+    const getDateRange = (period) => {
+        const now = new Date();
+        let startDate, endDate;
+
+        switch (period) {
+            case 'today':
+                startDate = new Date(now);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(now);
+                endDate.setHours(23, 59, 59, 999);
+                break;
+            case 'week':
+                const dayOfWeek = now.getDay();
+                const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - daysToMonday);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 6);
+                endDate.setHours(23, 59, 59, 999);
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                endDate.setHours(23, 59, 59, 999);
+                break;
+            case 'custom':
+                // For custom, we'll use the current week as default
+                const dayOfWeekCustom = now.getDay();
+                const daysToMondayCustom = dayOfWeekCustom === 0 ? 6 : dayOfWeekCustom - 1;
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - daysToMondayCustom);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 6);
+                endDate.setHours(23, 59, 59, 999);
+                break;
+            default:
+                // Default to today
+                startDate = new Date(now);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(now);
+                endDate.setHours(23, 59, 59, 999);
+        }
+
+        return { startDate, endDate };
+    };
+
+    const formatDateRange = (startDate, endDate) => {
+        const start = startDate.toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        const end = endDate.toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        if (startDate.toDateString() === endDate.toDateString()) {
+            return start;
+        }
+        return `${start} - ${end}`;
+    };
+
+    const fetchCalendarEvents = async (period = 'today', useCache = true, forceSync = false, customStartDate = null, customEndDate = null) => {
         try {
             const token = localStorage.getItem('jwt_token');
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
             
-            const response = await fetch(`${API_BASE_URL}/calendars/events`, { headers });
-            const data = await response.json();
-
-            if (data.error) {
-                if (data.error.includes('403')) {
-                    displayCalendarAccessDenied();
-                } else {
-                    calendarEventsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
-                }
-                return;
+            let startDate, endDate;
+            
+            if (period === 'custom' && customStartDate && customEndDate) {
+                // Use the custom dates provided
+                startDate = new Date(customStartDate);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(customEndDate);
+                endDate.setHours(23, 59, 59, 999);
+            } else {
+                // Use the predefined period ranges
+                const dateRange = getDateRange(period);
+                startDate = dateRange.startDate;
+                endDate = dateRange.endDate;
             }
 
-            if (data.message && data.message.includes('No calendars accessible')) {
-                displayNoCalendarsAccessible();
+            const params = new URLSearchParams({
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+                useCache: useCache.toString(),
+                forceSync: forceSync.toString()
+            });
+            
+            console.log('Fetching events with params:', params.toString());
+            
+            const response = await fetch(`${API_BASE_URL}/calendars/events?${params}`, { headers });
+            const data = await response.json();
+
+            console.log('Events response:', data);
+
+            if (!data.success) {
+                calendarEventsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
                 return;
             }
 
             if (!data.events || data.events.length === 0) {
-                displayNoEvents();
+                displayNoEvents(period, startDate, endDate);
                 return;
             }
 
-            displayCalendarEvents(data.events);
+            displayCalendarEvents(data.events, period, startDate, endDate);
         } catch (error) {
             console.error('Failed to fetch calendar events:', error);
             calendarEventsDiv.innerHTML = '<p>Failed to fetch calendar events.</p>';
         }
     };
 
-    const displayCalendarAccessDenied = () => {
-        calendarEventsDiv.innerHTML = `
-            <div class="error-message">
-                <h3>🔒 Calendar Access Denied</h3>
-                <p>We don't have permission to access your Google Calendar. This usually happens when:</p>
-                <ul>
-                    <li>You haven't granted calendar permissions to this app</li>
-                    <li>Your Google account settings are restricting access</li>
-                    <li>The app needs to be re-authorized</li>
-                </ul>
-                <p><strong>To fix this:</strong></p>
-                <ol>
-                    <li><a href="https://myaccount.google.com/permissions" target="_blank">Go to your Google Account permissions</a></li>
-                    <li>Find this app and click "Remove access"</li>
-                    <li>Log out and log back in to re-grant permissions</li>
-                </ol>
-            </div>
-        `;
-    };
+    const refreshCalendar = async () => {
+        try {
+            console.log('Starting calendar refresh...');
+            
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/calendars/sync`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({})
+            });
+            
+            const data = await response.json();
+            console.log('Refresh response:', data);
 
-    const displayNoCalendarsAccessible = () => {
-        calendarEventsDiv.innerHTML = `
-            <div class="no-calendars">
-                <h3>📅 No Calendars Accessible</h3>
-                <p>We couldn't find any calendars to access. This might be because:</p>
-                <ul>
-                    <li>You don't have any calendars in your Google account</li>
-                    <li>Your calendars are set to private</li>
-                    <li>The app doesn't have the right permissions</li>
-                </ul>
-                <p>Try logging out and logging back in to refresh your permissions.</p>
-            </div>
-        `;
-    };
-
-    const displayNoEvents = () => {
-        calendarEventsDiv.innerHTML = `
-            <div class="no-events">
-                <h3>📅 No Events This Week</h3>
-                <p>You don't have any events scheduled for this week.</p>
-                <ul>
-                    <li>Check if you have events in other weeks</li>
-                    <li>Make sure your calendars are properly synced</li>
-                    <li>Try refreshing the page</li>
-                </ul>
-            </div>
-        `;
-    };
-
-    const displayCalendarEvents = (events) => {
-        if (!events || events.length === 0) {
-            displayNoEvents();
-            return;
-        }
-
-        const now = new Date();
-        // Get Monday as start of week (0 = Sunday, 1 = Monday, etc.)
-        const dayOfWeek = now.getDay();
-        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday, go back 6 days to Monday
-        
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - daysToMonday);
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        endOfWeek.setHours(23, 59, 59, 999);
-
-        const thisWeeksEvents = events.filter(event => {
-            if (!event.start.dateTime) {
-                // For all-day events, we can check the date part
-                const eventDate = new Date(event.start.date);
-                return eventDate >= startOfWeek && eventDate <= endOfWeek;
+            if (response.status === 429) {
+                // Rate limited
+                showRateLimitMessage(data.retryAfter || 60);
+                return false;
             }
-            const eventDate = new Date(event.start.dateTime);
-            return eventDate >= startOfWeek && eventDate <= endOfWeek;
+
+            if (!data.success) {
+                console.error('Refresh failed:', data.error);
+                showErrorMessage(data.error);
+                return false;
+            }
+
+            console.log('Refresh completed:', data.results);
+            showSuccessMessage('Calendar refreshed successfully!');
+            return true;
+        } catch (error) {
+            console.error('Failed to refresh calendar:', error);
+            showErrorMessage('Failed to refresh calendar');
+            return false;
+        }
+    };
+
+    const showRateLimitMessage = (retryAfter) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'rate-limit-message';
+        messageDiv.innerHTML = `
+            <div class="alert alert-warning">
+                <strong>Too many refresh requests!</strong> 
+                Please wait ${retryAfter} seconds before trying again.
+            </div>
+        `;
+        
+        // Insert at the top of calendar events
+        calendarEventsDiv.insertBefore(messageDiv, calendarEventsDiv.firstChild);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.parentNode.removeChild(messageDiv);
+            }
+        }, 5000);
+    };
+
+    const showSuccessMessage = (message) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'success-message';
+        messageDiv.innerHTML = `
+            <div class="alert alert-success">
+                <strong>Success!</strong> ${message}
+            </div>
+        `;
+        
+        // Insert at the top of calendar events
+        calendarEventsDiv.insertBefore(messageDiv, calendarEventsDiv.firstChild);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.parentNode.removeChild(messageDiv);
+            }
+        }, 3000);
+    };
+
+    const showErrorMessage = (message) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'error-message';
+        messageDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Error!</strong> ${message}
+            </div>
+        `;
+        
+        // Insert at the top of calendar events
+        calendarEventsDiv.insertBefore(messageDiv, calendarEventsDiv.firstChild);
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.parentNode.removeChild(messageDiv);
+            }
+        }, 5000);
+    };
+
+    const createTimePeriodSelector = (currentPeriod = 'today') => {
+        const selectorDiv = document.createElement('div');
+        selectorDiv.className = 'time-period-selector';
+        selectorDiv.innerHTML = `
+            <div class="period-buttons">
+                <button class="period-btn ${currentPeriod === 'today' ? 'active' : ''}" data-period="today">Today</button>
+                <button class="period-btn ${currentPeriod === 'week' ? 'active' : ''}" data-period="week">This Week</button>
+                <button class="period-btn ${currentPeriod === 'month' ? 'active' : ''}" data-period="month">This Month</button>
+                <button class="period-btn ${currentPeriod === 'custom' ? 'active' : ''}" data-period="custom">Custom Range</button>
+            </div>
+            <div class="custom-date-range" style="display: ${currentPeriod === 'custom' ? 'block' : 'none'};">
+                <div class="date-inputs">
+                    <div class="date-input">
+                        <label for="start-date">Start Date:</label>
+                        <input type="date" id="start-date">
+                    </div>
+                    <div class="date-input">
+                        <label for="end-date">End Date:</label>
+                        <input type="date" id="end-date">
+                    </div>
+                    <button class="apply-custom-btn">Apply</button>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners for period buttons
+        const periodButtons = selectorDiv.querySelectorAll('.period-btn');
+        periodButtons.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                // Remove active class from all buttons
+                periodButtons.forEach(b => b.classList.remove('active'));
+                // Add active class to clicked button
+                btn.classList.add('active');
+                
+                const period = btn.dataset.period;
+                const customRange = selectorDiv.querySelector('.custom-date-range');
+                
+                if (period === 'custom') {
+                    customRange.style.display = 'block';
+                    // Set default dates (current week)
+                    const { startDate, endDate } = getDateRange('week');
+                    document.getElementById('start-date').value = startDate.toISOString().split('T')[0];
+                    document.getElementById('end-date').value = endDate.toISOString().split('T')[0];
+                } else {
+                    customRange.style.display = 'none';
+                    await fetchCalendarEvents(period);
+                }
+            });
         });
 
-        // Format date range for display
-        const startDate = startOfWeek.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        const endDate = endOfWeek.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        // Add event listener for apply custom button
+        const applyBtn = selectorDiv.querySelector('.apply-custom-btn');
+        applyBtn.addEventListener('click', async () => {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (!startDate || !endDate) {
+                showErrorMessage('Please select both start and end dates');
+                return;
+            }
+            
+            if (new Date(startDate) > new Date(endDate)) {
+                showErrorMessage('Start date must be before end date');
+                return;
+            }
+            
+            await fetchCalendarEvents('custom', true, false, startDate, endDate);
+        });
 
-        if (thisWeeksEvents.length === 0) {
-            calendarEventsDiv.innerHTML = `
-                <div class="no-events">
-                    <h3>📅 No Events This Week (${startDate} - ${endDate})</h3>
-                    <p>You don't have any events scheduled for this week.</p>
-                </div>
-            `;
+        return selectorDiv;
+    };
+
+    const displayNoEvents = (period = 'today', startDate, endDate) => {
+        const dateRange = formatDateRange(startDate, endDate);
+        const periodText = period === 'today' ? 'Today' : 
+                          period === 'week' ? 'This Week' : 
+                          period === 'month' ? 'This Month' : 'Custom Range';
+
+        const timeSelector = createTimePeriodSelector(period);
+        
+        calendarEventsDiv.innerHTML = '';
+        calendarEventsDiv.appendChild(timeSelector);
+        
+        const noEventsDiv = document.createElement('div');
+        noEventsDiv.className = 'no-events';
+        noEventsDiv.innerHTML = `
+            <h3>📅 No Events ${periodText} (${dateRange})</h3>
+            <p>You don't have any events scheduled for this period.</p>
+            <div class="sync-controls">
+                <button id="refresh-btn" class="sync-btn">🔄 Refresh Calendar</button>
+            </div>
+        `;
+        calendarEventsDiv.appendChild(noEventsDiv);
+
+        // Add event listener for the refresh button
+        document.getElementById('refresh-btn').addEventListener('click', async () => {
+            console.log('Refresh button clicked');
+            const success = await refreshCalendar();
+            if (success) {
+                await fetchCalendarEvents(period, true, false);
+            }
+        });
+    };
+
+    const displayCalendarEvents = (events, period = 'today', startDate, endDate) => {
+        if (!events || events.length === 0) {
+            displayNoEvents(period, startDate, endDate);
             return;
         }
 
-        let html = `<h3>📅 This Week's Events (${startDate} - ${endDate})</h3>`;
-        html += '<div class="events-list">';
+        const dateRange = formatDateRange(startDate, endDate);
+        const periodText = period === 'today' ? 'Today' : 
+                          period === 'week' ? 'This Week' : 
+                          period === 'month' ? 'This Month' : 'Custom Range';
 
-        thisWeeksEvents.forEach(event => {
-            const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
-            const timeString = event.start.dateTime 
-                ? eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                : 'All day';
+        const timeSelector = createTimePeriodSelector(period);
+        
+        calendarEventsDiv.innerHTML = '';
+        calendarEventsDiv.appendChild(timeSelector);
+        
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'calendar-header';
+        headerDiv.innerHTML = `
+            <h3>📅 ${periodText}'s Events (${dateRange})</h3>
+            <div class="sync-controls">
+                <button id="refresh-btn" class="sync-btn">🔄 Refresh</button>
+            </div>
+        `;
+        calendarEventsDiv.appendChild(headerDiv);
+        
+        const eventsListDiv = document.createElement('div');
+        eventsListDiv.className = 'events-list';
+
+        events.forEach(event => {
+            const eventDate = new Date(event.startTime);
+            const timeString = event.isAllDay 
+                ? 'All day'
+                : eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             const dateString = eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
             
-            const calendarName = event.calendarName || 'Unknown Calendar';
+            const calendarName = event.calendarId || 'Unknown Calendar';
             
-            html += `
-                <div class="event-card">
-                    <div class="event-header">
-                        <h3>${event.summary || 'Untitled Event'}</h3>
-                        <span class="calendar-badge">📅 ${calendarName}</span>
-                    </div>
-                    <div class="event-time">${dateString} at ${timeString}</div>
-                    ${event.description ? `<div class="event-description">${event.description}</div>` : ''}
-                    ${event.location ? `<div class="event-location">📍 ${event.location}</div>` : ''}
+            const eventCard = document.createElement('div');
+            eventCard.className = 'event-card';
+            eventCard.innerHTML = `
+                <div class="event-header">
+                    <h3>${event.title || 'Untitled Event'}</h3>
+                    <span class="calendar-badge">📅 ${calendarName}</span>
                 </div>
+                <div class="event-time">${dateString} at ${timeString}</div>
+                ${event.description ? `<div class="event-description">${event.description}</div>` : ''}
+                ${event.location ? `<div class="event-location">📍 ${event.location}</div>` : ''}
+                ${event.attendees && event.attendees.length > 0 ? 
+                    `<div class="event-attendees">👥 ${event.attendees.length} attendee${event.attendees.length > 1 ? 's' : ''}</div>` : ''}
             `;
+            eventsListDiv.appendChild(eventCard);
         });
 
-        html += '</div>';
-        calendarEventsDiv.innerHTML = html;
+        calendarEventsDiv.appendChild(eventsListDiv);
+
+        // Add event listener for the refresh button
+        document.getElementById('refresh-btn').addEventListener('click', async () => {
+            console.log('Refresh button clicked');
+            const success = await refreshCalendar();
+            if (success) {
+                await fetchCalendarEvents(period, true, false);
+            }
+        });
     };
 }); 

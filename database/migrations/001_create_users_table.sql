@@ -15,7 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 -- Create index on google_id for OAuth lookups
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
--- Create updated_at trigger function
+-- Create updated_at trigger function (only if it doesn't exist)
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -24,8 +24,13 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create trigger for users table
-CREATE TRIGGER update_users_updated_at 
-    BEFORE UPDATE ON users 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column(); 
+-- Create trigger for users table (only if it doesn't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_updated_at') THEN
+        CREATE TRIGGER update_users_updated_at 
+            BEFORE UPDATE ON users 
+            FOR EACH ROW 
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$; 

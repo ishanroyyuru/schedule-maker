@@ -1,179 +1,325 @@
 const express = require('express');
-const { getCalendarApi, setCredentials, refreshAccessToken } = require('../config/google');
+const { google } = require('googleapis');
+const CalendarSyncService = require('../services/CalendarSyncService');
 const CalendarConnection = require('../models/CalendarConnection');
-const authMiddleware = require('../middleware/auth');
+const User = require('../models/User');
+const auth = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
+const calendarSyncService = new CalendarSyncService();
 
-// This entire route is protected
-router.use(authMiddleware);
-
-// Get all available calendars
-router.get('/list', async (req, res) => {
-    try {
-        const userId = req.user.id;
-        console.log('Calendar list request for user ID:', userId);
-        
-        // Find the user's Google calendar connection
-        const [connection] = await CalendarConnection.findByUserAndProvider(userId, 'google');
-        console.log('Calendar connection found:', !!connection);
-        
-        if (!connection) {
-            console.log('No Google Calendar connection found for user:', userId);
-            return res.status(404).json({ error: 'Google Calendar connection not found for this user.' });
-        }
-
-        console.log('Setting credentials with access token length:', connection.access_token?.length);
-        console.log('Setting credentials with refresh token length:', connection.refresh_token?.length);
-
-        // Set credentials for the Google Calendar API
-        setCredentials(connection.access_token, connection.refresh_token);
-
-        const calendar = getCalendarApi();
-        
-        // Get list of all calendars
-        const calendarList = await calendar.calendarList.list();
-        
-        if (!calendarList.data.items || calendarList.data.items.length === 0) {
-            return res.json({ 
-                calendars: [],
-                message: 'No calendars accessible. Please check your Google Calendar permissions.'
-            });
-        }
-
-        res.json({ 
-            calendars: calendarList.data.items,
-            message: `Found ${calendarList.data.items.length} calendar(s)`
-        });
-
-    } catch (error) {
-        console.error('Error fetching calendar list:', error);
-        
-        if (error.code === 403) {
-            return res.status(403).json({ 
-                error: 'Calendar access denied. Please check your Google Calendar permissions.',
-                details: 'The app does not have permission to access your calendars.'
-            });
-        }
-        
-        res.status(500).json({ error: 'Failed to fetch calendar list.' });
-    }
-});
-
-// Get events from all accessible calendars
-router.get('/events', async (req, res) => {
-    try {
-        const userId = req.user.id;
-        console.log('Calendar events request for user ID:', userId);
-        
-        // Find the user's Google calendar connection
-        const [connection] = await CalendarConnection.findByUserAndProvider(userId, 'google');
-        console.log('Calendar connection found for events:', !!connection);
-
-        if (!connection) {
-            console.log('No Google Calendar connection found for user (events):', userId);
-            return res.status(404).json({ error: 'Google Calendar connection not found for this user.' });
-        }
-
-        console.log('Setting credentials for events with access token length:', connection.access_token?.length);
-        console.log('Setting credentials for events with refresh token length:', connection.refresh_token?.length);
-
-        // Set credentials for the Google Calendar API
-        setCredentials(connection.access_token, connection.refresh_token);
-
-        const calendar = getCalendarApi();
-        
-        // First, get list of all calendars
-        const calendarList = await calendar.calendarList.list();
-        
-        if (!calendarList.data.items || calendarList.data.items.length === 0) {
-            return res.json({ 
-                events: [],
-                message: 'No calendars accessible. Please check your Google Calendar permissions.',
-                calendars: []
-            });
-        }
-
-        // Get events from all calendars
-        const allEvents = [];
-        const calendarInfo = [];
-
-        for (const cal of calendarList.data.items) {
-            try {
-                const events = await calendar.events.list({
-                    calendarId: cal.id,
-                    timeMin: new Date().toISOString(),
-                    maxResults: 50,
-                    singleEvents: true,
-                    orderBy: 'startTime'
-                });
-
-                if (events.data.items) {
-                    events.data.items.forEach(event => {
-                        event.calendarName = cal.summary;
-                        event.calendarId = cal.id;
-                        allEvents.push(event);
-                    });
-                }
-
-                calendarInfo.push({
-                    id: cal.id,
-                    name: cal.summary,
-                    accessRole: cal.accessRole
-                });
-
-            } catch (calendarError) {
-                console.error(`Error fetching events from calendar ${cal.summary}:`, calendarError);
-                // Continue with other calendars even if one fails
-            }
-        }
-
-        // Sort all events by start time
-        allEvents.sort((a, b) => {
-            const aTime = a.start.dateTime || a.start.date;
-            const bTime = b.start.dateTime || b.start.date;
-            return new Date(aTime) - new Date(bTime);
-        });
-
-        res.json({ 
-            events: allEvents,
-            calendars: calendarInfo,
-            message: `Found ${allEvents.length} events across ${calendarInfo.length} calendar(s)`
-        });
-
-    } catch (error) {
-        console.error('Error fetching calendar events:', error);
-        
-        if (error.code === 403) {
-            return res.status(403).json({ 
-                error: 'Calendar access denied. Please check your Google Calendar permissions.',
-                details: 'The app does not have permission to access your calendars.'
-            });
-        }
-        
-        res.status(500).json({ error: 'Failed to fetch calendar events.' });
-    }
-});
-
-// Get calendar events
-router.get('/:calendarId/events', async (req, res) => {
-  try {
-    // TODO: Implement calendar events fetching logic
-    res.json({ message: 'Calendar events endpoints coming soon' });
-  } catch (error) {
-    console.error('Error getting calendar events:', error);
-    res.status(500).json({ error: 'Failed to get calendar events' });
+// Rate limiting for sync operations (conservative limits)
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 3, // Allow 3 sync requests per minute per user
+  message: {
+    success: false,
+    error: 'Too many sync requests. Please wait a minute before trying again.',
+    retryAfter: 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id || req.ip, // Rate limit by user ID
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: 'Too many sync requests. Please wait a minute before trying again.',
+      retryAfter: 60
+    });
   }
 });
 
-// Create calendar event
-router.post('/:calendarId/events', async (req, res) => {
+// Get user's calendar events with hybrid storage
+router.get('/events', auth, async (req, res) => {
   try {
-    // TODO: Implement calendar event creation logic
-    res.json({ message: 'Calendar event creation coming soon' });
+    const { startDate, endDate, useCache = 'true', forceSync = 'false' } = req.query;
+    
+    const options = {
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      useCache: useCache === 'true',
+      forceSync: forceSync === 'true'
+    };
+
+    const events = await calendarSyncService.getUserEvents(req.user.id, options);
+    
+    res.json({
+      success: true,
+      events: events.map(event => ({
+        id: event.event_id,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.start_time,
+        endTime: event.end_time,
+        isAllDay: event.is_all_day,
+        status: event.status,
+        attendees: event.attendees ? JSON.parse(event.attendees) : [],
+        provider: event.provider,
+        calendarId: event.calendar_id
+      }))
+    });
   } catch (error) {
-    console.error('Error creating calendar event:', error);
-    res.status(500).json({ error: 'Failed to create calendar event' });
+    console.error('Error fetching calendar events:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch calendar events',
+      details: error.message
+    });
+  }
+});
+
+// Google Calendar webhook for automatic sync
+router.post('/webhook', async (req, res) => {
+  try {
+    const { headers, body } = req;
+    
+    // Verify the webhook is from Google
+    const resourceId = headers['x-goog-resource-id'];
+    const resourceUri = headers['x-goog-resource-uri'];
+    const resourceState = headers['x-goog-resource-state'];
+    
+    console.log('Google Calendar webhook received:', {
+      resourceId,
+      resourceUri,
+      resourceState
+    });
+
+    // Only process if it's a calendar change
+    if (resourceState === 'sync' || resourceState === 'exists') {
+      // Extract calendar ID from resource URI
+      const calendarId = resourceUri.split('/').pop();
+      
+      // Find all users with this calendar
+      const connections = await CalendarConnection.findByCalendarId(calendarId);
+      
+      // Sync each user's calendar
+      for (const connection of connections) {
+        try {
+          console.log(`Auto-syncing calendar for user ${connection.user_id}`);
+          await calendarSyncService.syncConnection(connection, true);
+        } catch (error) {
+          console.error(`Error auto-syncing user ${connection.user_id}:`, error);
+        }
+      }
+    }
+
+    // Always return 200 to acknowledge receipt
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// Set up webhook subscription for a user's calendar
+router.post('/subscribe', auth, async (req, res) => {
+  try {
+    const { calendarId = 'primary' } = req.body;
+    
+    // Get user's calendar connection
+    const connections = await CalendarConnection.findByUserId(req.user.id);
+    const connection = connections.find(c => c.calendar_id === calendarId);
+    
+    if (!connection) {
+      return res.status(404).json({
+        success: false,
+        error: 'Calendar connection not found'
+      });
+    }
+
+    // Set up Google Calendar API
+    const { google } = require('googleapis');
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      access_token: connection.access_token,
+      refresh_token: connection.refresh_token
+    });
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    // Create webhook subscription
+    const webhookUrl = `${process.env.BASE_URL || 'http://localhost:3001'}/api/calendars/webhook`;
+    
+    const subscription = await calendar.events.watch({
+      calendarId: calendarId,
+      resource: {
+        id: `calendar-sync-${req.user.id}-${Date.now()}`,
+        type: 'web_hook',
+        address: webhookUrl,
+        params: {
+          ttl: '86400' // 24 hours
+        }
+      }
+    });
+
+    console.log('Webhook subscription created:', subscription.data);
+
+    res.json({
+      success: true,
+      message: 'Webhook subscription created',
+      subscription: subscription.data
+    });
+
+  } catch (error) {
+    console.error('Error setting up webhook:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to set up webhook',
+      details: error.message
+    });
+  }
+});
+
+// Get user's availability
+router.get('/availability', auth, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'startDate and endDate are required'
+      });
+    }
+
+    const availability = await calendarSyncService.getAvailability(
+      req.user.id,
+      new Date(startDate),
+      new Date(endDate)
+    );
+    
+    res.json({
+      success: true,
+      availability
+    });
+  } catch (error) {
+    console.error('Error fetching availability:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch availability',
+      details: error.message
+    });
+  }
+});
+
+// Find conflicts for a time period
+router.get('/conflicts', auth, async (req, res) => {
+  try {
+    const { startTime, endTime, excludeEventId } = req.query;
+    
+    if (!startTime || !endTime) {
+      return res.status(400).json({
+        success: false,
+        error: 'startTime and endTime are required'
+      });
+    }
+
+    const conflicts = await calendarSyncService.findConflicts(
+      req.user.id,
+      new Date(startTime),
+      new Date(endTime),
+      excludeEventId
+    );
+    
+    res.json({
+      success: true,
+      conflicts: conflicts.map(event => ({
+        id: event.event_id,
+        title: event.title,
+        startTime: event.start_time,
+        endTime: event.end_time
+      }))
+    });
+  } catch (error) {
+    console.error('Error finding conflicts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to find conflicts',
+      details: error.message
+    });
+  }
+});
+
+// Sync calendar manually (with rate limiting)
+router.post('/sync', auth, syncLimiter, async (req, res) => {
+  try {
+    // Always force sync for manual refresh
+    const forceSync = true;
+    
+    const syncResults = await calendarSyncService.syncUserCalendar(req.user.id, forceSync);
+    
+    res.json({
+      success: true,
+      message: 'Calendar refreshed successfully',
+      results: syncResults
+    });
+  } catch (error) {
+    console.error('Error syncing calendar:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync calendar',
+      details: error.message
+    });
+  }
+});
+
+// Get calendar connections
+router.get('/connections', auth, async (req, res) => {
+  try {
+    const connections = await CalendarConnection.findByUserId(req.user.id);
+    
+    res.json({
+      success: true,
+      connections: connections.map(conn => ({
+        id: conn.id,
+        provider: conn.provider,
+        calendarId: conn.calendar_id,
+        createdAt: conn.created_at,
+        updatedAt: conn.updated_at
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching calendar connections:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch calendar connections',
+      details: error.message
+    });
+  }
+});
+
+// Disconnect calendar
+router.delete('/connections/:id', auth, async (req, res) => {
+  try {
+    const connection = await CalendarConnection.findById(req.params.id);
+    
+    if (!connection || connection.user_id !== req.user.id) {
+      return res.status(404).json({
+        success: false,
+        error: 'Calendar connection not found'
+      });
+    }
+
+    await CalendarConnection.delete(req.params.id);
+    
+    res.json({
+      success: true,
+      message: 'Calendar connection removed successfully'
+    });
+  } catch (error) {
+    console.error('Error removing calendar connection:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove calendar connection',
+      details: error.message
+    });
   }
 });
 
