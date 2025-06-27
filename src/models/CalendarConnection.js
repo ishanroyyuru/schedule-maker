@@ -2,21 +2,23 @@ const db = require('../config/database');
 
 class CalendarConnection {
   static async upsert(connectionData) {
-    const { userId, provider, accessToken, refreshToken, expiresAt, calendarId } = connectionData;
+    const { userId, provider, accessToken, refreshToken, expiresAt, calendarId, calendarName, calendarColor } = connectionData;
     
     const query = `
-      INSERT INTO calendar_connections (user_id, provider, access_token, refresh_token, expires_at, calendar_id, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      INSERT INTO calendar_connections (user_id, provider, access_token, refresh_token, expires_at, calendar_id, calendar_summary, calendar_color, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       ON CONFLICT (user_id, provider, calendar_id)
       DO UPDATE SET
         access_token = EXCLUDED.access_token,
         refresh_token = EXCLUDED.refresh_token,
         expires_at = EXCLUDED.expires_at,
+        calendar_summary = EXCLUDED.calendar_summary,
+        calendar_color = EXCLUDED.calendar_color,
         updated_at = NOW()
       RETURNING *
     `;
     
-    const values = [userId, provider, accessToken, refreshToken, expiresAt, calendarId];
+    const values = [userId, provider, accessToken, refreshToken, expiresAt, calendarId, calendarName || calendarId, calendarColor || '#4285f4'];
     
     try {
       const result = await db.query(query, values);

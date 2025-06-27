@@ -483,14 +483,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 : eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             const dateString = eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
             
-            const calendarName = event.calendarId || 'Unknown Calendar';
+            const calendarName = event.calendarName || event.calendarId || 'Unknown Calendar';
+            const calendarColor = event.calendarColor || '#4285f4';
             
             const eventCard = document.createElement('div');
             eventCard.className = 'event-card';
             eventCard.innerHTML = `
                 <div class="event-header">
                     <h3>${event.title || 'Untitled Event'}</h3>
-                    <span class="calendar-badge">📅 ${calendarName}</span>
+                    <span class="calendar-badge" style="background-color: ${calendarColor}; color: white;">📅 ${calendarName}</span>
                 </div>
                 <div class="event-time">${dateString} at ${timeString}</div>
                 ${event.description ? `<div class="event-description">${event.description}</div>` : ''}

@@ -61,10 +61,10 @@ class CalendarEvent {
     const { startDate, endDate, limit = 100, offset = 0 } = options;
     
     let query = `
-      SELECT ce.*, cc.provider, cc.calendar_id
+      SELECT ce.*, cc.provider, cc.calendar_id, cc.calendar_summary, cc.calendar_color
       FROM calendar_events ce
       JOIN calendar_connections cc ON ce.calendar_connection_id = cc.id
-      WHERE ce.user_id = $1
+      WHERE ce.user_id = $1 AND cc.calendar_id <> 'primary'
     `;
     
     const values = [userId];

@@ -57,7 +57,9 @@ router.get('/events', auth, async (req, res) => {
         status: event.status,
         attendees: event.attendees ? JSON.parse(event.attendees) : [],
         provider: event.provider,
-        calendarId: event.calendar_id
+        calendarId: event.calendar_id,
+        calendarName: event.calendar_summary || event.calendar_id,
+        calendarColor: event.calendar_color || '#4285f4'
       }))
     });
   } catch (error) {

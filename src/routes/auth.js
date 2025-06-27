@@ -49,15 +49,32 @@ router.get('/google/callback', async (req, res) => {
       });
     }
 
-    // Save or update calendar connection
-    await CalendarConnection.upsert({
-      userId: user.id,
-      provider: 'google',
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-      calendarId: 'primary'
+    // Fetch all calendars for the user and upsert connections
+    const { google } = require('googleapis');
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+    oauth2Client.setCredentials({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: tokens.expiry_date
     });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendarList = await calendar.calendarList.list();
+    for (const cal of calendarList.data.items) {
+      await CalendarConnection.upsert({
+        userId: user.id,
+        provider: 'google',
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        calendarId: cal.id,
+        calendarName: cal.summary,
+        calendarColor: cal.backgroundColor || cal.colorId || '#4285f4'
+      });
+    }
 
     // Generate JWT token
     const jwtToken = jwt.sign(
