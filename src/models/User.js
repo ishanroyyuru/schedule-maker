@@ -33,6 +33,16 @@ class User {
     }
   }
 
+  static async verifyPassword(email, password) {
+    const user = await this.findByEmail(email);
+    if (!user || !user.password_hash) {
+      return null;
+    }
+    
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    return isValid ? user : null;
+  }
+
   static async findById(id) {
     const query = 'SELECT * FROM users WHERE id = $1';
     
@@ -89,6 +99,34 @@ class User {
     } catch (error) {
       console.error('Error finding all users:', error);
       throw new Error('Failed to find users');
+    }
+  }
+
+  static async search(query, excludeIds = []) {
+    const searchQuery = `
+      SELECT id, name, email
+      FROM users
+      WHERE (
+        LOWER(name) LIKE LOWER($1) OR
+        LOWER(email) LIKE LOWER($1)
+      )
+      AND google_id IS NOT NULL
+      ${excludeIds.length > 0 ? 'AND id != ALL($2)' : ''}
+      ORDER BY name
+      LIMIT 10
+    `;
+
+    try {
+      const params = [`%${query}%`];
+      if (excludeIds.length > 0) {
+        params.push(excludeIds);
+      }
+
+      const result = await db.query(searchQuery, params);
+      return result.rows;
+    } catch (error) {
+      console.error('Error searching users:', error);
+      throw new Error('Failed to search users');
     }
   }
 }

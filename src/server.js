@@ -9,6 +9,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const calendarRoutes = require('./routes/calendars');
+const friendRoutes = require('./routes/friends');
 const BackgroundSyncService = require('./services/BackgroundSyncService');
 
 const app = express();
@@ -70,6 +71,7 @@ app.use(session({
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/calendars', calendarRoutes);
+app.use('/api/friends', friendRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

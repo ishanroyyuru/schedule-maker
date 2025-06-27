@@ -3,16 +3,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    const profileBtn = document.getElementById('profile-btn');
+    const backBtn = document.getElementById('back-btn');
     const userInfoDiv = document.getElementById('user-info');
     const userNameSpan = document.getElementById('user-name');
     const calendarEventsDiv = document.getElementById('calendar-events');
+    const homePage = document.getElementById('home-page');
+    const profilePage = document.getElementById('profile-page');
 
     console.log('Elements found:', {
         loginBtn: !!loginBtn,
         logoutBtn: !!logoutBtn,
+        profileBtn: !!profileBtn,
+        backBtn: !!backBtn,
         userInfoDiv: !!userInfoDiv,
         userNameSpan: !!userNameSpan,
-        calendarEventsDiv: !!calendarEventsDiv
+        calendarEventsDiv: !!calendarEventsDiv,
+        homePage: !!homePage,
+        profilePage: !!profilePage
     });
 
     const API_BASE_URL = 'http://localhost:3001/api';
@@ -37,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.authenticated) {
                 loginBtn.style.display = 'none';
                 logoutBtn.style.display = 'block';
+                profileBtn.style.display = 'block';
                 userInfoDiv.style.display = 'block';
                 
                 // If user data is available, use it; otherwise show generic message
@@ -51,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 loginBtn.style.display = 'block';
                 logoutBtn.style.display = 'none';
+                profileBtn.style.display = 'none';
                 userInfoDiv.style.display = 'none';
                 calendarEventsDiv.innerHTML = '<p>Please log in to see your calendar events.</p>';
             }
@@ -58,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to check authentication status:', error);
             loginBtn.style.display = 'block';
             logoutBtn.style.display = 'none';
+            profileBtn.style.display = 'none';
             userInfoDiv.style.display = 'none';
             calendarEventsDiv.innerHTML = '<p>Failed to check authentication status.</p>';
         }
@@ -92,14 +103,55 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('jwt_token');
             loginBtn.style.display = 'block';
             logoutBtn.style.display = 'none';
+            profileBtn.style.display = 'none';
             userInfoDiv.style.display = 'none';
             calendarEventsDiv.innerHTML = '<p>Please log in to see your calendar events.</p>';
         }
     };
 
-    // Check authentication status on page load
-    checkAuthStatus();
+    const showProfile = async () => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/auth/me`, { headers });
+            const data = await response.json();
 
+            if (data.user) {
+                document.getElementById('profile-name').textContent = data.user.name || 'N/A';
+                document.getElementById('profile-email').textContent = data.user.email || 'N/A';
+                document.getElementById('profile-timezone').textContent = data.user.timezone || 'UTC';
+                
+                const calendarConnection = data.calendarConnections?.[0];
+                document.getElementById('profile-calendar').textContent = 
+                    calendarConnection ? 'Google Calendar (Connected)' : 'No calendar connected';
+            }
+
+            // Load friends and pending requests
+            await loadFriends();
+            await loadPendingRequests();
+
+            // Show profile page
+            homePage.style.display = 'none';
+            profilePage.style.display = 'flex';
+
+        } catch (error) {
+            console.error('Failed to fetch profile data:', error);
+            showErrorMessage('Failed to load profile data');
+        }
+    };
+
+    const showHome = () => {
+        profilePage.style.display = 'none';
+        homePage.style.display = 'flex';
+    };
+
+    // Event listeners for navigation
+    profileBtn.addEventListener('click', showProfile);
+    backBtn.addEventListener('click', showHome);
+
+    // Event listeners
+    checkAuthStatus();
     loginBtn.addEventListener('click', handleLogin);
     logoutBtn.addEventListener('click', handleLogout);
 
@@ -513,4 +565,230 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     };
+
+    // Friend management functions
+    const loadFriends = async () => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/friends`, { headers });
+            const data = await response.json();
+
+            const friendsList = document.getElementById('friends-list');
+            friendsList.innerHTML = '';
+
+            if (data.friends && data.friends.length > 0) {
+                data.friends.forEach(friend => {
+                    friendsList.appendChild(createFriendElement(friend, 'friend'));
+                });
+            } else {
+                friendsList.innerHTML = '<p class="empty-message">No friends added yet</p>';
+            }
+        } catch (error) {
+            console.error('Failed to load friends:', error);
+            showErrorMessage('Failed to load friends list');
+        }
+    };
+
+    const loadPendingRequests = async () => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/friends/pending`, { headers });
+            const data = await response.json();
+
+            const pendingList = document.getElementById('pending-requests');
+            pendingList.innerHTML = '';
+
+            if (data.requests && data.requests.length > 0) {
+                data.requests.forEach(request => {
+                    pendingList.appendChild(createFriendElement(request, 'request'));
+                });
+            } else {
+                pendingList.innerHTML = '<p class="empty-message">No pending friend requests</p>';
+            }
+        } catch (error) {
+            console.error('Failed to load pending requests:', error);
+            showErrorMessage('Failed to load friend requests');
+        }
+    };
+
+    const createFriendElement = (user, type) => {
+        const div = document.createElement('div');
+        div.className = 'friend-item';
+        
+        const info = document.createElement('div');
+        info.className = 'friend-info';
+        
+        const name = document.createElement('div');
+        name.className = 'friend-name';
+        name.textContent = user.name;
+        
+        const email = document.createElement('div');
+        email.className = 'friend-email';
+        email.textContent = user.email;
+        
+        info.appendChild(name);
+        info.appendChild(email);
+        
+        const actions = document.createElement('div');
+        actions.className = 'friend-actions';
+        
+        if (type === 'request') {
+            const acceptBtn = document.createElement('button');
+            acceptBtn.className = 'friend-btn accept';
+            acceptBtn.textContent = 'Accept';
+            acceptBtn.onclick = () => handleFriendRequest(user.id, 'accept');
+            
+            const rejectBtn = document.createElement('button');
+            rejectBtn.className = 'friend-btn reject';
+            rejectBtn.textContent = 'Reject';
+            rejectBtn.onclick = () => handleFriendRequest(user.id, 'reject');
+            
+            actions.appendChild(acceptBtn);
+            actions.appendChild(rejectBtn);
+        } else if (type === 'friend') {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'friend-btn remove';
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => removeFriend(user.id);
+            
+            actions.appendChild(removeBtn);
+        } else if (type === 'search') {
+            const addBtn = document.createElement('button');
+            addBtn.className = 'friend-btn add';
+            addBtn.textContent = 'Add Friend';
+            addBtn.onclick = () => sendFriendRequest(user.id);
+            
+            actions.appendChild(addBtn);
+        }
+        
+        div.appendChild(info);
+        div.appendChild(actions);
+        
+        return div;
+    };
+
+    const handleFriendRequest = async (friendId, action) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+            
+            const response = await fetch(`${API_BASE_URL}/friends/${action}/${friendId}`, {
+                method: 'PUT',
+                headers
+            });
+            
+            if (!response.ok) throw new Error(`Failed to ${action} friend request`);
+            
+            // Reload friends and pending requests
+            await loadFriends();
+            await loadPendingRequests();
+            
+            showSuccessMessage(`Friend request ${action}ed successfully`);
+        } catch (error) {
+            console.error(`Failed to ${action} friend request:`, error);
+            showErrorMessage(`Failed to ${action} friend request`);
+        }
+    };
+
+    const removeFriend = async (friendId) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+            
+            const response = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
+                method: 'DELETE',
+                headers
+            });
+            
+            if (!response.ok) throw new Error('Failed to remove friend');
+            
+            await loadFriends();
+            showSuccessMessage('Friend removed successfully');
+        } catch (error) {
+            console.error('Failed to remove friend:', error);
+            showErrorMessage('Failed to remove friend');
+        }
+    };
+
+    const sendFriendRequest = async (friendId) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+            
+            const response = await fetch(`${API_BASE_URL}/friends/request/${friendId}`, {
+                method: 'POST',
+                headers
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to send friend request');
+            }
+            
+            showSuccessMessage('Friend request sent successfully');
+            document.getElementById('friend-search').value = '';
+            document.getElementById('friend-search-results').innerHTML = '';
+        } catch (error) {
+            console.error('Failed to send friend request:', error);
+            showErrorMessage(error.message);
+        }
+    };
+
+    // Friend search functionality
+    let searchTimeout;
+    const friendSearch = document.getElementById('friend-search');
+    const searchResults = document.getElementById('friend-search-results');
+
+    friendSearch.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+        
+        if (query.length < 2) {
+            searchResults.innerHTML = '';
+            searchResults.classList.remove('active');
+            return;
+        }
+        
+        searchTimeout = setTimeout(async () => {
+            try {
+                const token = localStorage.getItem('jwt_token');
+                const headers = { 'Authorization': `Bearer ${token}` };
+                
+                const response = await fetch(`${API_BASE_URL}/friends/search?query=${encodeURIComponent(query)}`, { headers });
+                const data = await response.json();
+                
+                searchResults.innerHTML = '';
+                
+                if (data.users && data.users.length > 0) {
+                    data.users.forEach(user => {
+                        searchResults.appendChild(createFriendElement(user, 'search'));
+                    });
+                    searchResults.classList.add('active');
+                } else {
+                    searchResults.innerHTML = '<p class="empty-message">No users found</p>';
+                    searchResults.classList.add('active');
+                }
+            } catch (error) {
+                console.error('Failed to search users:', error);
+                showErrorMessage('Failed to search users');
+            }
+        }, 300);
+    });
+
+    // Close search results when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.friend-search')) {
+            searchResults.classList.remove('active');
+        }
+    });
 }); 
