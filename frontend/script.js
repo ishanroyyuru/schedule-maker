@@ -176,161 +176,220 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const getDateRange = (period) => {
-        const now = new Date();
-        let startDate, endDate;
+    let currentWeekStart = null;
 
-        switch (period) {
-            case 'today':
-                startDate = new Date(now);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(now);
-                endDate.setHours(23, 59, 59, 999);
-                break;
-            case 'week':
-                const dayOfWeek = now.getDay();
-                const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                startDate = new Date(now);
-                startDate.setDate(now.getDate() - daysToMonday);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6);
-                endDate.setHours(23, 59, 59, 999);
-                break;
-            case 'month':
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-                endDate.setHours(23, 59, 59, 999);
-                break;
-            case 'custom':
-                // For custom, we'll use the current week as default
-                const dayOfWeekCustom = now.getDay();
-                const daysToMondayCustom = dayOfWeekCustom === 0 ? 6 : dayOfWeekCustom - 1;
-                startDate = new Date(now);
-                startDate.setDate(now.getDate() - daysToMondayCustom);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6);
-                endDate.setHours(23, 59, 59, 999);
-                break;
-            default:
-                // Default to today
-                startDate = new Date(now);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(now);
-                endDate.setHours(23, 59, 59, 999);
-        }
-
-        return { startDate, endDate };
+    const formatTime = (date) => {
+        return date.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+        });
     };
 
-    const formatDateRange = (startDate, endDate) => {
-        const start = startDate.toLocaleDateString('en-US', { 
-            weekday: 'short', 
+    const formatDate = (date) => {
+        return date.toLocaleDateString('en-US', { 
             month: 'short', 
-            day: 'numeric' 
+            day: 'numeric'
         });
-        const end = endDate.toLocaleDateString('en-US', { 
-            weekday: 'short', 
-            month: 'short', 
-            day: 'numeric' 
+    };
+
+    const isToday = (date) => {
+        const today = new Date();
+        return date.getDate() === today.getDate() &&
+               date.getMonth() === today.getMonth() &&
+               date.getFullYear() === today.getFullYear();
+    };
+
+    const createDayElement = (date, events) => {
+        const dayEvents = events.filter(event => {
+            const eventDate = new Date(event.startTime);
+            return eventDate.getDate() === date.getDate() &&
+                   eventDate.getMonth() === date.getMonth() &&
+                   eventDate.getFullYear() === date.getFullYear();
         });
+
+        const dayElement = document.createElement('div');
+        dayElement.className = `calendar-day${isToday(date) ? ' today' : ''}`;
+
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'calendar-day-header';
+        dayHeader.innerHTML = `<span class="calendar-date">${formatDate(date)}</span>`;
+        dayElement.appendChild(dayHeader);
+
+        const eventsList = document.createElement('ul');
+        eventsList.className = 'calendar-events-list';
+
+        dayEvents.forEach(event => {
+            const eventItem = document.createElement('li');
+            eventItem.className = 'calendar-event';
+            eventItem.style.borderLeftColor = event.calendarColor || '#4285f4';
+            eventItem.innerHTML = `
+                <div class="calendar-event-time">${formatTime(new Date(event.startTime))}</div>
+                <div class="calendar-event-title">${event.title}</div>
+            `;
+            
+            // Add tooltip with more details
+            const tooltip = document.createElement('div');
+            tooltip.className = 'event-tooltip';
+            tooltip.innerHTML = `
+                <strong>${event.title}</strong><br>
+                Time: ${formatTime(new Date(event.startTime))} - ${formatTime(new Date(event.endTime))}<br>
+                ${event.location ? `Location: ${event.location}<br>` : ''}
+                Calendar: ${event.calendarName}
+            `;
+            eventItem.appendChild(tooltip);
+            
+            eventsList.appendChild(eventItem);
+        });
+
+        dayElement.appendChild(eventsList);
+        return dayElement;
+    };
+
+    // Add tooltip styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .calendar-event {
+            position: relative;
+        }
         
-        if (startDate.toDateString() === endDate.toDateString()) {
-            return start;
+        .event-tooltip {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 200px;
+            left: 100%;
+            top: 0;
+            margin-left: 10px;
         }
-        return `${start} - ${end}`;
+        
+        .calendar-event:hover .event-tooltip {
+            display: block;
+        }
+    `;
+    document.head.appendChild(style);
+
+    const updateCalendarGrid = async (weekStart) => {
+        const calendarBody = document.querySelector('.calendar-body');
+        if (!calendarBody) return;
+
+        // Update current week display
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        document.querySelector('.current-week').textContent = 
+            `${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
+
+        // Fetch events for the week
+        const events = await fetchCalendarEvents('week', true, false, weekStart, weekEnd);
+        if (!events) return;
+
+        // Clear existing calendar days
+        calendarBody.innerHTML = '';
+
+        // Create day elements for the week
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(weekStart);
+            date.setDate(date.getDate() + i);
+            const dayElement = createDayElement(date, events);
+            calendarBody.appendChild(dayElement);
+        }
     };
 
-    const fetchCalendarEvents = async (period = 'today', useCache = true, forceSync = false, customStartDate = null, customEndDate = null) => {
+    const navigateWeek = (direction) => {
+        if (!currentWeekStart) {
+            currentWeekStart = new Date();
+            const day = currentWeekStart.getDay();
+            const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1);
+            currentWeekStart.setDate(diff);
+        }
+
+        const newWeekStart = new Date(currentWeekStart);
+        newWeekStart.setDate(newWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+        currentWeekStart = newWeekStart;
+        updateCalendarGrid(currentWeekStart);
+    };
+
+    // Add event listeners for week navigation
+    document.getElementById('prev-week')?.addEventListener('click', () => navigateWeek('prev'));
+    document.getElementById('next-week')?.addEventListener('click', () => navigateWeek('next'));
+
+    // Modify the existing fetchCalendarEvents function
+    const fetchCalendarEvents = async (period = 'week', useCache = true, forceSync = false, customStartDate = null, customEndDate = null) => {
         try {
             const token = localStorage.getItem('jwt_token');
-            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-            
-            let startDate, endDate;
-            
-            if (period === 'custom' && customStartDate && customEndDate) {
-                // Use the custom dates provided
-                startDate = new Date(customStartDate);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(customEndDate);
-                endDate.setHours(23, 59, 59, 999);
-            } else {
-                // Use the predefined period ranges
-                const dateRange = getDateRange(period);
-                startDate = dateRange.startDate;
-                endDate = dateRange.endDate;
+            if (!token) {
+                calendarEventsDiv.innerHTML = '<p>Please log in to see your calendar events.</p>';
+                return null;
             }
 
-            const params = new URLSearchParams({
-                startDate: startDate.toISOString(),
-                endDate: endDate.toISOString(),
-                useCache: useCache.toString(),
-                forceSync: forceSync.toString()
-            });
-            
-            console.log('Fetching events with params:', params.toString());
-            
-            const response = await fetch(`${API_BASE_URL}/calendars/events?${params}`, { headers });
+            const headers = { 'Authorization': `Bearer ${token}` };
+            let url = `${API_BASE_URL}/calendars/events?useCache=${useCache}&forceSync=${forceSync}`;
+
+            if (customStartDate && customEndDate) {
+                url += `&startDate=${customStartDate.toISOString()}&endDate=${customEndDate.toISOString()}`;
+            }
+
+            const response = await fetch(url, { headers });
             const data = await response.json();
 
-            console.log('Events response:', data);
-
             if (!data.success) {
-                calendarEventsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
-                return;
+                if (data.error === 'RATE_LIMIT_EXCEEDED') {
+                    showRateLimitMessage(data.retryAfter);
+                } else {
+                    showErrorMessage(data.error);
+                }
+                return null;
             }
 
-            if (!data.events || data.events.length === 0) {
-                displayNoEvents(period, startDate, endDate);
-                return;
+            // Initialize the calendar if this is the first load
+            if (!currentWeekStart) {
+                currentWeekStart = new Date();
+                const day = currentWeekStart.getDay();
+                const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1);
+                currentWeekStart.setDate(diff);
+                currentWeekStart.setHours(0, 0, 0, 0);
+                updateCalendarGrid(currentWeekStart);
             }
 
-            displayCalendarEvents(data.events, period, startDate, endDate);
+            return data.events;
+
         } catch (error) {
             console.error('Failed to fetch calendar events:', error);
-            calendarEventsDiv.innerHTML = '<p>Failed to fetch calendar events.</p>';
+            showErrorMessage('Failed to fetch calendar events');
+            return null;
         }
     };
 
+    const refreshBtn = document.getElementById('refresh-btn');
+    
     const refreshCalendar = async () => {
         try {
-            console.log('Starting calendar refresh...');
+            if (!refreshBtn) return;
             
-            const token = localStorage.getItem('jwt_token');
-            const headers = token ? { 
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            } : {};
+            // Add loading state
+            refreshBtn.classList.add('loading');
+            refreshBtn.disabled = true;
             
-            const response = await fetch(`${API_BASE_URL}/calendars/sync`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({})
-            });
+            // Force sync with no cache
+            await fetchCalendarEvents('week', false, true, currentWeekStart, new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000));
             
-            const data = await response.json();
-            console.log('Refresh response:', data);
-
-            if (response.status === 429) {
-                // Rate limited
-                showRateLimitMessage(data.retryAfter || 60);
-                return false;
-            }
-
-            if (!data.success) {
-                console.error('Refresh failed:', data.error);
-                showErrorMessage(data.error);
-                return false;
-            }
-
-            console.log('Refresh completed:', data.results);
+            // Update the calendar grid with fresh data
+            await updateCalendarGrid(currentWeekStart);
+            
             showSuccessMessage('Calendar refreshed successfully!');
-            return true;
         } catch (error) {
             console.error('Failed to refresh calendar:', error);
             showErrorMessage('Failed to refresh calendar');
-            return false;
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.classList.remove('loading');
+                refreshBtn.disabled = false;
+            }
         }
     };
 
@@ -791,4 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
             searchResults.classList.remove('active');
         }
     });
+
+    // Add refresh button event listener
+    refreshBtn?.addEventListener('click', refreshCalendar);
 }); 

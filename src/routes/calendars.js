@@ -9,6 +9,20 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const calendarSyncService = new CalendarSyncService();
 
+// ---- helpers ----
+function safeParseJSON(value, fallback = []) {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return value.trim() ? JSON.parse(value) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  if (typeof value === 'object') return value; // already json/jsonb
+  return fallback;
+}
+
 // Rate limiting for sync operations (conservative limits)
 const syncLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute window
@@ -55,7 +69,8 @@ router.get('/events', auth, async (req, res) => {
         endTime: event.end_time,
         isAllDay: event.is_all_day,
         status: event.status,
-        attendees: event.attendees ? JSON.parse(event.attendees) : [],
+        attendees: safeParseJSON(event.attendees, []), // <- safe either string or object
+        recurrence: safeParseJSON(event.recurrence, []),
         provider: event.provider,
         calendarId: event.calendar_id,
         calendarName: event.calendar_summary || event.calendar_id,
@@ -132,7 +147,6 @@ router.post('/subscribe', auth, async (req, res) => {
     }
 
     // Set up Google Calendar API
-    const { google } = require('googleapis');
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -325,4 +339,4 @@ router.delete('/connections/:id', auth, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

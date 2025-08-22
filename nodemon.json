@@ -1,6 +1,6 @@
 {
-  "watch": ["src/", "frontend/"],
-  "ext": "js,json,html,css",
+  "watch": ["src/**/*", "frontend/**/*"],
+  "ext": "js json html css",
   "ignore": ["src/**/*.test.js"],
   "exec": "node src/server.js",
   "delay": "1000ms"

@@ -6,6 +6,8 @@ class BackgroundSyncService {
     this.calendarSyncService = new CalendarSyncService();
     this.syncInterval = null;
     this.isRunning = false;
+    this.lastSyncTime = null;
+    this.nextSyncTime = null;
   }
 
   // Start background sync service
@@ -16,14 +18,19 @@ class BackgroundSyncService {
     }
 
     console.log(`Starting background sync service (interval: ${intervalMinutes} minutes)`);
-    
+
     this.isRunning = true;
-    this.syncInterval = setInterval(async () => {
+
+    const run = async () => {
+      this.lastSyncTime = new Date();
+      this.nextSyncTime = new Date(Date.now() + intervalMinutes * 60 * 1000);
       await this.performBackgroundSync();
-    }, intervalMinutes * 60 * 1000);
+    };
+
+    this.syncInterval = setInterval(run, intervalMinutes * 60 * 1000);
 
     // Perform initial sync
-    this.performBackgroundSync();
+    run();
   }
 
   // Stop background sync service
@@ -40,10 +47,10 @@ class BackgroundSyncService {
   async performBackgroundSync() {
     try {
       console.log('Starting background sync for all users...');
-      
+
       // Get all calendar connections
       const connections = await CalendarConnection.findAll();
-      
+
       if (connections.length === 0) {
         console.log('No calendar connections found for background sync');
         return;
@@ -64,11 +71,27 @@ class BackgroundSyncService {
       for (const [userId, userConns] of Object.entries(userConnections)) {
         try {
           console.log(`Background syncing user ${userId} (${userConns.length} calendars)`);
-          
+
           for (const connection of userConns) {
             try {
-              await this.calendarSyncService.syncConnection(connection, false);
+              // Skip known-dead connections early
+              if (connection.status === 'REAUTH_REQUIRED') {
+                console.log(`Skipping connection ${connection.id} (needs reauth)`);
+                continue;
+              }
+
+              const res = await this.calendarSyncService.syncConnection(connection, false);
+
+              if (res?.status === 'REAUTH_REQUIRED') {
+                console.log(`Connection ${connection.id} marked as REAUTH_REQUIRED; skipping further work`);
+                continue;
+              }
             } catch (error) {
+              // Quietly ignore the typed reauth error to avoid log spam
+              if (error && (error.code === 'REAUTH_REQUIRED' || /invalid[_-\s]?grant/i.test(error.message))) {
+                console.log(`Connection ${connection.id} requires reauth; skipping`);
+                continue;
+              }
               console.error(`Error background syncing connection ${connection.id}:`, error);
             }
           }
@@ -93,4 +116,4 @@ class BackgroundSyncService {
   }
 }
 
-module.exports = BackgroundSyncService; 
+module.exports = BackgroundSyncService;
