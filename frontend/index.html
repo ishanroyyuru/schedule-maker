@@ -7,100 +7,95 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="home-page">
-        <header>
+  <div id="app-container">
+    <div id="main-content">
+      <div id="home-page">
+        <div id="page-container">
+          <header>
             <h1>Schedule Maker</h1>
             <div class="header-buttons">
-                <button id="profile-btn" class="btn btn-secondary" style="display: none;">Profile</button>
-                <button id="login-btn" class="btn btn-primary">Login with Google</button>
-                <button id="logout-btn" class="btn btn-secondary" style="display: none;">Logout</button>
+              <button id="profile-btn" class="btn btn-secondary" style="display: none;">Profile</button>
+              <button id="login-btn" class="btn btn-primary">Login with Google</button>
+              <button id="logout-btn" class="btn btn-secondary" style="display: none;">Logout</button>
             </div>
-        </header>
-
-        <main>
-            <div class="container">
-                <div id="user-info" style="display: none;">
-                    <h2>Welcome, <span id="user-name">User</span>!</h2>
-                </div>
-
-                <div id="calendar-events">
-                    <p>Please log in to see your calendar events.</p>
-                </div>
+          </header>
+          <main id="main-flex-area">
+            <section id="friends-section">
+              <div class="section-title">Friends</div>
+            </section>
+            <div class="container" id="schedule-section">
+              <div id="user-info" style="display: none;">
+                <h2>Welcome, <span id="user-name">User</span>!</h2>
+              </div>
+              <div id="calendar-events">
+                <p>Please log in to see your calendar events.</p>
+              </div>
             </div>
-        </main>
-    </div>
-
-    <!-- Profile Page -->
-    <div id="profile-page" class="page" style="display: none;">
+          </main>
+        </div>
+      </div>
+      <div id="profile-page" class="page" style="display: none;">
         <header>
-            <div class="header-content">
-                <button id="back-btn" class="btn btn-secondary">← Back</button>
-                <h1>Profile</h1>
-            </div>
+          <div class="header-content">
+            <button id="back-btn" class="btn btn-secondary">← Back</button>
+            <h1>Profile</h1>
+          </div>
         </header>
-
         <main>
-            <div class="container">
-                <!-- User Info Section -->
-                <div class="profile-section">
-                    <h3>User Information</h3>
-                    <div class="profile-info">
-                        <div class="info-group">
-                            <label>Name:</label>
-                            <span id="profile-name"></span>
-                        </div>
-                        <div class="info-group">
-                            <label>Email:</label>
-                            <span id="profile-email"></span>
-                        </div>
-                        <div class="info-group">
-                            <label>Timezone:</label>
-                            <span id="profile-timezone"></span>
-                        </div>
-                        <div class="info-group">
-                            <label>Connected Calendar:</label>
-                            <span id="profile-calendar"></span>
-                        </div>
-                    </div>
+          <div class="container">
+            <div class="profile-section">
+              <h3>User Information</h3>
+              <div class="profile-info">
+                <div class="info-group">
+                  <label>Name:</label>
+                  <span id="profile-name"></span>
                 </div>
-
-                <!-- Friends Section -->
-                <div class="profile-section">
-                    <h3>Friends</h3>
-                    
-                    <!-- Add Friend Section -->
-                    <div class="add-friend-section">
-                        <h4>Add New Friends</h4>
-                        <div class="friend-search">
-                            <label for="friend-search">Search users by name or email:</label>
-                            <div class="search-box">
-                                <input type="text" id="friend-search" placeholder="Type at least 2 characters to search...">
-                                <div class="search-hint">Start typing to see users you can add as friends</div>
-                            </div>
-                            <div id="friend-search-results" class="friend-search-results"></div>
-                        </div>
-                    </div>
-
-                    <!-- Friend Requests -->
-                    <div class="friend-requests">
-                        <h4>Pending Requests</h4>
-                        <div id="pending-requests" class="friend-list">
-                            <p class="empty-message">No pending friend requests</p>
-                        </div>
-                    </div>
-
-                    <!-- Friends List -->
-                    <div class="friends-list">
-                        <h4>Your Friends</h4>
-                        <div id="friends-list" class="friend-list">
-                            <p class="empty-message">No friends added yet</p>
-                        </div>
-                    </div>
+                <div class="info-group">
+                  <label>Email:</label>
+                  <span id="profile-email"></span>
                 </div>
+                <div class="info-group">
+                  <label>Timezone:</label>
+                  <span id="profile-timezone"></span>
+                </div>
+                <div class="info-group">
+                  <label>Connected Calendar:</label>
+                  <span id="profile-calendar"></span>
+                </div>
+              </div>
             </div>
+            <div class="profile-section">
+              <h3>Friends</h3>
+              <div class="add-friend-section">
+                <h4>Add New Friends</h4>
+                <div class="friend-search">
+                  <label for="friend-search">Search users by name or email:</label>
+                  <div class="search-box">
+                    <input type="text" id="friend-search" placeholder="Type at least 2 characters to search...">
+                    <div class="search-hint">Start typing to see users you can add as friends</div>
+                  </div>
+                  <div id="friend-search-results" class="friend-search-results"></div>
+                </div>
+              </div>
+              <div class="friend-requests">
+                <h4>Pending Requests</h4>
+                <div id="pending-requests" class="friend-list">
+                  <p class="empty-message">No pending friend requests</p>
+                </div>
+              </div>
+              <div class="friends-list">
+                <h4>Your Friends</h4>
+                <div id="friends-list" class="friend-list">
+                  <p class="empty-message">No friends added yet</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </main>
+      </div>
+      <div id="event-list"></div>
     </div>
-
-    <script src="script.js"></script>
+  </div>
+  <script src="script.js"></script>
 </body>
 </html> 

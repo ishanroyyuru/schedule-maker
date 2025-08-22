@@ -5,11 +5,26 @@ const User = require('../models/User');
 
 class CalendarSyncService {
   constructor() {
-    this.googleAuth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
+    // Remove the global OAuth2 client - we'll create user-specific ones
+    this.clientId = process.env.GOOGLE_CLIENT_ID;
+    this.clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    this.redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  }
+
+  // Create a user-specific OAuth2 client
+  createUserOAuth2Client(connection) {
+    const oauth2Client = new google.auth.OAuth2(
+      this.clientId,
+      this.clientSecret,
+      this.redirectUri
     );
+    
+    oauth2Client.setCredentials({
+      access_token: connection.access_token,
+      refresh_token: connection.refresh_token
+    });
+    
+    return oauth2Client;
   }
 
   async syncUserCalendar(userId, forceSync = false) {
@@ -74,12 +89,10 @@ class CalendarSyncService {
       await this.refreshTokenIfNeeded(connection);
 
       console.log('Setting up Google Calendar API...');
-      this.googleAuth.setCredentials({
-        access_token: connection.access_token,
-        refresh_token: connection.refresh_token
-      });
+      // Create user-specific OAuth2 client
+      const userOAuth2Client = this.createUserOAuth2Client(connection);
 
-      const calendar = google.calendar({ version: 'v3', auth: this.googleAuth });
+      const calendar = google.calendar({ version: 'v3', auth: userOAuth2Client });
 
       const now = new Date();
       const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -101,42 +114,28 @@ class CalendarSyncService {
       let updatedCount = 0;
       let deletedCount = 0;
 
-      const existingEvents = await CalendarEvent.findByConnectionId(connection.id, {
-        startDate: now,
-        endDate: oneWeekFromNow
-      });
-      
-      console.log(`Found ${existingEvents.length} existing events in database`);
-      
+      // Get existing events for this connection
+      const existingEvents = await CalendarEvent.findByConnectionId(connection.id);
       const existingEventIds = new Set(existingEvents.map(e => e.event_id));
-      const newEventIds = new Set();
+      const newEventIds = new Set(events.map(e => e.id));
 
-      for (const event of events) {
-        try {
-          const eventData = this.transformGoogleEvent(event, connection.user_id, connection.id);
-          await CalendarEvent.upsert(eventData);
-          newEventIds.add(event.id);
-          
-          if (existingEventIds.has(event.id)) {
-            updatedCount++;
-          } else {
-            syncedCount++;
-          }
-        } catch (error) {
-          console.error(`Error syncing event ${event.id}:`, error);
-        }
-      }
-
+      // Delete events that no longer exist in Google Calendar
       for (const existingEvent of existingEvents) {
         if (!newEventIds.has(existingEvent.event_id)) {
-          await CalendarEvent.deleteByEventId(
-            connection.user_id,
-            connection.id,
-            existingEvent.event_id
-          );
+          await CalendarEvent.delete(existingEvent.id);
           deletedCount++;
         }
       }
+
+      // Upsert new/updated events
+      for (const event of events) {
+        const transformedEvent = this.transformGoogleEvent(event, connection.user_id, connection.id);
+        await CalendarEvent.upsert(transformedEvent);
+        syncedCount++;
+      }
+
+      // Update connection's last sync time
+      await CalendarConnection.updateLastSync(connection.id);
 
       const result = {
         connectionId: connection.id,
@@ -163,11 +162,10 @@ class CalendarSyncService {
     }
 
     try {
-      this.googleAuth.setCredentials({
-        refresh_token: connection.refresh_token
-      });
+      // Create user-specific OAuth2 client for token refresh
+      const userOAuth2Client = this.createUserOAuth2Client(connection);
 
-      const { credentials } = await this.googleAuth.refreshAccessToken();
+      const { credentials } = await userOAuth2Client.refreshAccessToken();
       
       await CalendarConnection.updateAccessToken(
         connection.id,
@@ -179,7 +177,32 @@ class CalendarSyncService {
       connection.expires_at = credentials.expiry_date ? new Date(credentials.expiry_date) : null;
     } catch (error) {
       console.error('Error refreshing token:', error);
+      
+      // Check if it's an invalid_grant error (token is permanently invalid)
+      if (error.response && error.response.data && error.response.data.error === 'invalid_grant') {
+        console.log(`Token for connection ${connection.id} is permanently invalid, marking for re-authentication`);
+        
+        // Mark this connection as needing re-authentication
+        await this.markConnectionForReauth(connection.id);
+        
+        throw new Error('TOKEN_INVALID_NEEDS_REAUTH');
+      }
+      
       throw new Error('Failed to refresh access token');
+    }
+  }
+
+  // Mark a connection as needing re-authentication
+  async markConnectionForReauth(connectionId) {
+    try {
+      // You could add a 'needs_reauth' field to your database
+      // For now, we'll just log it and the user will need to re-authenticate
+      console.log(`Connection ${connectionId} needs re-authentication`);
+      
+      // Optionally, you could update the connection status in the database
+      // await CalendarConnection.updateStatus(connectionId, 'needs_reauth');
+    } catch (error) {
+      console.error('Error marking connection for re-auth:', error);
     }
   }
 

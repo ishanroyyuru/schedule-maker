@@ -178,6 +178,18 @@ class CalendarEvent {
     }
   }
 
+  static async delete(id) {
+    const query = 'DELETE FROM calendar_events WHERE id = $1 RETURNING *';
+    
+    try {
+      const result = await db.query(query, [id]);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error deleting calendar event:', error);
+      throw new Error('Failed to delete calendar event');
+    }
+  }
+
   static async deleteByConnectionId(connectionId) {
     const query = 'DELETE FROM calendar_events WHERE calendar_connection_id = $1 RETURNING *';
     
