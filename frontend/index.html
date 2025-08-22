@@ -12,6 +12,7 @@
             <h1>Schedule Maker</h1>
             <div class="header-buttons">
                 <button id="profile-btn" class="btn btn-secondary" style="display: none;">Profile</button>
+                <button id="find-times-btn" class="btn btn-secondary" style="display: none;">Find Times</button>
                 <button id="login-btn" class="btn btn-primary">Login with Google</button>
                 <button id="logout-btn" class="btn btn-secondary" style="display: none;">Logout</button>
             </div>
@@ -60,6 +61,74 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Find Times Modal -->
+    <div id="find-times-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Find Common Times</h2>
+                <button id="close-find-times-modal" class="modal-close">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="find-times-form">
+                    <div class="form-group">
+                        <label for="friend-select">Select Friends:</label>
+                        <div id="friend-checkboxes" class="friend-checkboxes">
+                            <!-- Friend checkboxes will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="start-date">Start Date:</label>
+                            <input type="date" id="start-date" name="start-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="end-date">End Date:</label>
+                            <input type="date" id="end-date" name="end-date" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="event-duration">Event Duration (minutes):</label>
+                            <input type="number" id="event-duration" name="event-duration" min="15" max="480" value="60" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="time-window">Time Window:</label>
+                            <div class="time-window-inputs">
+                                <input type="time" id="start-time" name="start-time" value="08:00" required>
+                                <span>to</span>
+                                <input type="time" id="end-time" name="end-time" value="20:00" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Find Common Times</button>
+                        <button type="button" id="cancel-find-times" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+                
+                <div id="find-times-results" class="find-times-results" style="display: none;">
+                    <h3>Available Time Slots</h3>
+                    <div id="time-slots-list" class="time-slots-list">
+                        <!-- Time slots will be populated here -->
+                    </div>
+                </div>
+                
+                <div id="find-times-loading" class="loading-state" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Finding common times...</p>
+                </div>
+                
+                <div id="find-times-error" class="error-state" style="display: none;">
+                    <p class="error-message"></p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Profile Page -->

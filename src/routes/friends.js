@@ -1,6 +1,7 @@
 const express = require('express');
 const Friend = require('../models/Friend');
 const User = require('../models/User');
+const CalendarEvent = require('../models/CalendarEvent');
 const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
@@ -328,5 +329,160 @@ router.get('/search', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Find common availability times
+router.post('/find-times', async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { friendIds, startDate, endDate, duration, startTime, endTime } = req.body;
+
+        if (!friendIds || !Array.isArray(friendIds) || friendIds.length === 0) {
+            return res.status(400).json({ error: 'Friend IDs are required' });
+        }
+
+        if (!startDate || !endDate || !duration || !startTime || !endTime) {
+            return res.status(400).json({ error: 'All parameters are required' });
+        }
+
+        // Validate friend IDs - ensure they are actual friends
+        const userFriends = await Friend.getFriends(userId);
+        
+        // Convert friendIds to integers for comparison
+        const friendIdsInt = friendIds.map(id => parseInt(id));
+        
+        const validFriendIds = userFriends
+            .filter(friend => friendIdsInt.includes(friend.id))
+            .map(friend => friend.id);
+
+        if (validFriendIds.length !== friendIdsInt.length) {
+            console.log('Friend validation failed:', {
+                requested: friendIdsInt,
+                available: userFriends.map(f => f.id),
+                valid: validFriendIds
+            });
+            return res.status(400).json({ 
+                error: 'Some friend IDs are invalid',
+                requested: friendIdsInt,
+                available: userFriends.map(f => ({ id: f.id, name: f.name }))
+            });
+        }
+
+        // Parse dates in local time to avoid timezone issues
+        const parseLocalDate = (dateStr) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day); // month is 0-indexed
+        };
+
+        const localStartDate = parseLocalDate(startDate);
+        const localEndDate = parseLocalDate(endDate);
+
+        // Get busy times for current user
+        const userBusyTimes = await CalendarEvent.findByUserId(userId, {
+            startDate: localStartDate,
+            endDate: localEndDate
+        });
+
+        // Get busy times for all friends
+        const allFriendBusyTimes = [];
+        for (const friendId of validFriendIds) {
+            const friendBusyTimes = await CalendarEvent.findByUserId(friendId, {
+                startDate: localStartDate,
+                endDate: localEndDate
+            });
+            allFriendBusyTimes.push(...friendBusyTimes);
+        }
+
+        // Combine all busy times
+        const allBusyTimes = [...userBusyTimes, ...allFriendBusyTimes];
+
+        // Parse time window
+        const [startHour, startMinute] = startTime.split(':').map(Number);
+        const [endHour, endMinute] = endTime.split(':').map(Number);
+
+        // Find common free times
+        const commonFreeTimes = findCommonFreeTimes(
+            allBusyTimes,
+            localStartDate,
+            localEndDate,
+            duration,
+            startHour * 60 + startMinute,
+            endHour * 60 + endMinute
+        );
+
+        res.json({ 
+            success: true,
+            freeTimes: commonFreeTimes,
+            totalSlots: commonFreeTimes.length
+        });
+
+    } catch (error) {
+        console.error('Find times error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Helper function to find common free times
+function findCommonFreeTimes(busyTimes, startDate, endDate, durationMinutes, startTimeMinutes, endTimeMinutes) {
+    const freeTimes = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+        const dayStart = new Date(currentDate);
+        dayStart.setHours(Math.floor(startTimeMinutes / 60), startTimeMinutes % 60, 0, 0);
+        
+        const dayEnd = new Date(currentDate);
+        dayEnd.setHours(Math.floor(endTimeMinutes / 60), endTimeMinutes % 60, 0, 0);
+        
+        // Get busy times for this day
+        const dayBusyTimes = busyTimes.filter(event => {
+            const eventStart = new Date(event.start_time);
+            const eventEnd = new Date(event.end_time);
+            return eventStart.toDateString() === currentDate.toDateString();
+        });
+        
+        // Find free slots for this day
+        const dayFreeSlots = findFreeSlotsForDay(dayStart, dayEnd, dayBusyTimes, durationMinutes);
+        freeTimes.push(...dayFreeSlots);
+        
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Limit results to reasonable number
+    return freeTimes.slice(0, 50);
+}
+
+function findFreeSlotsForDay(dayStart, dayEnd, busyTimes, durationMinutes) {
+    const freeSlots = [];
+    let currentTime = new Date(dayStart);
+    
+    while (currentTime < dayEnd) {
+        const slotEnd = new Date(currentTime.getTime() + durationMinutes * 60000);
+        
+        if (slotEnd > dayEnd) break;
+        
+        // Check if this slot conflicts with any busy time
+        const hasConflict = busyTimes.some(busy => {
+            const busyStart = new Date(busy.start_time);
+            const busyEnd = new Date(busy.end_time);
+            
+            // Check for overlap
+            return (currentTime < busyEnd && slotEnd > busyStart);
+        });
+        
+        if (!hasConflict) {
+            freeSlots.push({
+                start: new Date(currentTime),
+                end: new Date(slotEnd),
+                duration: durationMinutes
+            });
+        }
+        
+        // Move to next potential slot (30-minute increments)
+        currentTime.setMinutes(currentTime.getMinutes() + 30);
+    }
+    
+    return freeSlots;
+}
 
 module.exports = router; 

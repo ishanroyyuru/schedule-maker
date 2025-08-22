@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginBtn = document.getElementById('login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const profileBtn = document.getElementById('profile-btn');
+    const findTimesBtn = document.getElementById('find-times-btn');
     const backBtn = document.getElementById('back-btn');
     const userInfoDiv = document.getElementById('user-info');
     const userNameSpan = document.getElementById('user-name');
@@ -11,17 +12,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const homePage = document.getElementById('home-page');
     const profilePage = document.getElementById('profile-page');
 
+    // Navigation buttons
+    const prevWeekBtn = document.getElementById('prev-week');
+    const nextWeekBtn = document.getElementById('next-week');
+    const refreshBtn = document.getElementById('refresh-btn');
+
+    // Find Times Modal Elements
+    const findTimesModal = document.getElementById('find-times-modal');
+    const closeFindTimesModalBtn = document.getElementById('close-find-times-modal');
+    const cancelFindTimes = document.getElementById('cancel-find-times');
+    const findTimesForm = document.getElementById('find-times-form');
+    const friendCheckboxes = document.getElementById('friend-checkboxes');
+    const startDateInput = document.getElementById('start-date');
+    const endDateInput = document.getElementById('end-date');
+    const eventDurationInput = document.getElementById('event-duration');
+    const startTimeInput = document.getElementById('start-time');
+    const endTimeInput = document.getElementById('end-time');
+    const findTimesResults = document.getElementById('find-times-results');
+    const timeSlotsList = document.getElementById('time-slots-list');
+    const findTimesLoading = document.getElementById('find-times-loading');
+    const findTimesError = document.getElementById('find-times-error');
+
     console.log('Elements found:', {
         loginBtn: !!loginBtn,
         logoutBtn: !!logoutBtn,
         profileBtn: !!profileBtn,
+        findTimesBtn: !!findTimesBtn,
         backBtn: !!backBtn,
         userInfoDiv: !!userInfoDiv,
         userNameSpan: !!userNameSpan,
         calendarEventsDiv: !!calendarEventsDiv,
         homePage: !!homePage,
-        profilePage: !!profilePage
+        profilePage: !!profilePage,
+        findTimesModal: !!findTimesModal,
+        prevWeekBtn: !!prevWeekBtn,
+        nextWeekBtn: !!nextWeekBtn,
+        refreshBtn: !!refreshBtn
     });
+
+    // Additional debugging
+    console.log('Login button element:', loginBtn);
+    console.log('Login button text:', loginBtn?.textContent);
+    console.log('Login button display:', loginBtn?.style.display);
 
     const API_BASE_URL = 'http://localhost:3001/api';
     
@@ -43,15 +75,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (data.authenticated) {
-                loginBtn.style.display = 'none';
-                logoutBtn.style.display = 'block';
-                profileBtn.style.display = 'block';
-                userInfoDiv.style.display = 'block';
+                if (loginBtn) loginBtn.style.display = 'none';
+                if (logoutBtn) logoutBtn.style.display = 'block';
+                if (profileBtn) profileBtn.style.display = 'block';
+                if (findTimesBtn) findTimesBtn.style.display = 'block';
+                if (userInfoDiv) userInfoDiv.style.display = 'block';
                 
                 // If user data is available, use it; otherwise show generic message
-                if (data.user && data.user.name) {
+                if (data.user && data.user.name && userNameSpan) {
                     userNameSpan.textContent = data.user.name;
-                } else {
+                } else if (userNameSpan) {
                     userNameSpan.textContent = 'User';
                 }
                 
@@ -59,19 +92,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 await fetchCalendarConnections();
                 await fetchFriendsForSidebar(); // Add this line
             } else {
-                loginBtn.style.display = 'block';
-                logoutBtn.style.display = 'none';
-                profileBtn.style.display = 'none';
-                userInfoDiv.style.display = 'none';
-                calendarEventsDiv.innerHTML = '<p>Please log in to see your calendar events.</p>';
+                if (loginBtn) loginBtn.style.display = 'block';
+                if (logoutBtn) logoutBtn.style.display = 'none';
+                if (profileBtn) profileBtn.style.display = 'none';
+                if (findTimesBtn) findTimesBtn.style.display = 'none';
+                if (userInfoDiv) userInfoDiv.style.display = 'none';
+                if (calendarEventsDiv) calendarEventsDiv.innerHTML = '<p>Please log in to see your calendar events.</p>';
             }
         } catch (error) {
             console.error('Failed to check authentication status:', error);
-            loginBtn.style.display = 'block';
-            logoutBtn.style.display = 'none';
-            profileBtn.style.display = 'none';
-            userInfoDiv.style.display = 'none';
-            calendarEventsDiv.innerHTML = '<p>Failed to check authentication status.</p>';
+            if (loginBtn) loginBtn.style.display = 'block';
+            if (logoutBtn) logoutBtn.style.display = 'none';
+            if (profileBtn) profileBtn.style.display = 'none';
+            if (findTimesBtn) findTimesBtn.style.display = 'none';
+            if (userInfoDiv) userInfoDiv.style.display = 'none';
+            if (calendarEventsDiv) calendarEventsDiv.innerHTML = '<p>Failed to check authentication status.</p>';
         }
     };
 
@@ -147,14 +182,218 @@ document.addEventListener('DOMContentLoaded', () => {
         homePage.style.display = 'flex';
     };
 
+    // Find Times Functions (declared before event listeners)
+    const openFindTimesModal = () => {
+        // Set default dates (today to +14 days)
+        const today = new Date();
+        const endDate = new Date();
+        endDate.setDate(today.getDate() + 14);
+        
+        if (startDateInput) startDateInput.value = today.toISOString().split('T')[0];
+        if (endDateInput) endDateInput.value = endDate.toISOString().split('T')[0];
+        
+        // Populate friend checkboxes
+        populateFriendCheckboxes();
+        
+        // Reset form and results
+        if (findTimesForm) findTimesForm.reset();
+        if (findTimesResults) findTimesResults.style.display = 'none';
+        if (findTimesLoading) findTimesLoading.style.display = 'none';
+        if (findTimesError) findTimesError.style.display = 'none';
+        
+        // Show modal
+        if (findTimesModal) findTimesModal.style.display = 'flex';
+    };
+
+    const closeFindTimesModal = () => {
+        if (findTimesModal) findTimesModal.style.display = 'none';
+    };
+
+    const populateFriendCheckboxes = async () => {
+        if (!friendCheckboxes) return;
+        
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/friends`, { headers });
+            const data = await response.json();
+
+            if (data.friends && data.friends.length > 0) {
+                friendCheckboxes.innerHTML = data.friends.map(friend => `
+                    <div class="friend-checkbox-item">
+                        <input type="checkbox" id="friend-${friend.id}" name="friendIds" value="${friend.id}">
+                        <label for="friend-${friend.id}">${friend.name}</label>
+                    </div>
+                `).join('');
+            } else {
+                friendCheckboxes.innerHTML = '<p>No friends found. Add some friends first!</p>';
+            }
+        } catch (error) {
+            console.error('Failed to fetch friends:', error);
+            if (friendCheckboxes) friendCheckboxes.innerHTML = '<p>Failed to load friends</p>';
+        }
+    };
+
+    const handleFindTimesSubmit = async (e) => {
+        e.preventDefault();
+        
+        // Get selected friends
+        const selectedFriends = Array.from(document.querySelectorAll('input[name="friendIds"]:checked'))
+            .map(checkbox => checkbox.value);
+        
+        if (selectedFriends.length === 0) {
+            showFindTimesError('Please select at least one friend');
+            return;
+        }
+
+        // Debug: Log the selected friends
+        console.log('Selected friends:', selectedFriends);
+        console.log('Selected friends type:', typeof selectedFriends[0]);
+
+        // Get form data
+        const formData = {
+            friendIds: selectedFriends,
+            startDate: startDateInput ? startDateInput.value : '',
+            endDate: endDateInput ? endDateInput.value : '',
+            duration: eventDurationInput ? parseInt(eventDurationInput.value) : 60,
+            startTime: startTimeInput ? startTimeInput.value : '08:00',
+            endTime: endTimeInput ? endTimeInput.value : '20:00'
+        };
+
+        // Debug: Log the form data being sent
+        console.log('Form data being sent:', formData);
+        console.log('Start date object:', new Date(formData.startDate));
+        console.log('End date object:', new Date(formData.endDate));
+
+        // Validate time window
+        if (formData.startTime >= formData.endTime) {
+            showFindTimesError('Start time must be before end time');
+            return;
+        }
+
+        // Show loading state
+        if (findTimesLoading) findTimesLoading.style.display = 'flex';
+        if (findTimesResults) findTimesResults.style.display = 'none';
+        if (findTimesError) findTimesError.style.display = 'none';
+
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            const response = await fetch(`${API_BASE_URL}/friends/find-times`, {
+                method: 'POST',
+                headers: {
+                    ...headers,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                displayFindTimesResults(data.freeTimes);
+            } else {
+                showFindTimesError(data.error || 'Failed to find common times');
+            }
+        } catch (error) {
+            console.error('Find times error:', error);
+            showFindTimesError('Failed to find common times. Please try again.');
+        } finally {
+            if (findTimesLoading) findTimesLoading.style.display = 'none';
+        }
+    };
+
+    const displayFindTimesResults = (freeTimes) => {
+        if (!timeSlotsList) return;
+        
+        if (freeTimes.length === 0) {
+            timeSlotsList.innerHTML = '<p>No common free times found in the specified range.</p>';
+        } else {
+            timeSlotsList.innerHTML = freeTimes.map(slot => {
+                const startDate = new Date(slot.start);
+                const endDate = new Date(slot.end);
+                
+                return `
+                    <div class="time-slot-item">
+                        <div class="time-slot-info">
+                            <div class="time-slot-date">${startDate.toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                month: 'short', 
+                                day: 'numeric' 
+                            })}</div>
+                            <div class="time-slot-time">${startDate.toLocaleTimeString('en-US', { 
+                                hour: 'numeric', 
+                                minute: '2-digit',
+                                hour12: true 
+                            })} - ${endDate.toLocaleTimeString('en-US', { 
+                                hour: 'numeric', 
+                                minute: '2-digit',
+                                hour12: true 
+                            })}</div>
+                        </div>
+                        <button class="create-event-btn" onclick="createEventFromSlot('${slot.start}', '${slot.end}')">
+                            Create Event
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        if (findTimesResults) findTimesResults.style.display = 'block';
+    };
+
+    const showFindTimesError = (message) => {
+        if (!findTimesError) return;
+        const errorMessage = findTimesError.querySelector('.error-message');
+        if (errorMessage) errorMessage.textContent = message;
+        findTimesError.style.display = 'block';
+    };
+
+    // Global function for create event button (needs to be accessible from onclick)
+    window.createEventFromSlot = (startTime, endTime) => {
+        // For now, just show an alert - you can integrate with your existing event creation flow
+        alert(`Creating event from ${new Date(startTime).toLocaleString()} to ${new Date(endTime).toLocaleString()}`);
+        closeFindTimesModal();
+        // TODO: Integrate with existing event creation modal/form
+    };
+
     // Event listeners for navigation
-    profileBtn.addEventListener('click', showProfile);
-    backBtn.addEventListener('click', showHome);
+    if (profileBtn) profileBtn.addEventListener('click', showProfile);
+    if (backBtn) backBtn.addEventListener('click', showHome);
+
+    // Find Times Event Listeners
+    if (findTimesBtn) findTimesBtn.addEventListener('click', openFindTimesModal);
+    if (closeFindTimesModalBtn) closeFindTimesModalBtn.addEventListener('click', closeFindTimesModal);
+    if (cancelFindTimes) cancelFindTimes.addEventListener('click', closeFindTimesModal);
+    if (findTimesForm) findTimesForm.addEventListener('submit', handleFindTimesSubmit);
+
+    // Close modal on backdrop click
+    if (findTimesModal) {
+        findTimesModal.addEventListener('click', (e) => {
+            if (e.target === findTimesModal) {
+                closeFindTimesModal();
+            }
+        });
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && findTimesModal && findTimesModal.style.display !== 'none') {
+            closeFindTimesModal();
+        }
+    });
 
     // Event listeners
     checkAuthStatus();
-    loginBtn.addEventListener('click', handleLogin);
-    logoutBtn.addEventListener('click', handleLogout);
+    if (loginBtn) {
+        console.log('Adding click listener to login button');
+        loginBtn.addEventListener('click', handleLogin);
+    } else {
+        console.error('Login button not found!');
+    }
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 
     console.log('Event listeners attached');
 
@@ -366,8 +605,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const refreshBtn = document.getElementById('refresh-btn');
-    
     const refreshCalendar = async () => {
         try {
             if (!refreshBtn) return;
