@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Sidebar: render friends
+    // fetchAndRenderSidebarFriends(); // Removed - this function looks for non-existent 'sidebar' element
+
     console.log('DOM loaded, initializing app...');
     
     const loginBtn = document.getElementById('login-btn');
@@ -146,14 +149,13 @@ document.addEventListener('DOMContentLoaded', () => {
         homePage.style.display = 'flex';
     };
 
-    // Event listeners for navigation
-    profileBtn.addEventListener('click', showProfile);
-    backBtn.addEventListener('click', showHome);
+    // Only add event listeners if elements exist
+    if (profileBtn) profileBtn.addEventListener('click', showProfile);
+    if (backBtn) backBtn.addEventListener('click', showHome);
+    if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 
-    // Event listeners
     checkAuthStatus();
-    loginBtn.addEventListener('click', handleLogin);
-    logoutBtn.addEventListener('click', handleLogout);
 
     console.log('Event listeners attached');
 
@@ -499,7 +501,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('end-date').value = endDate.toISOString().split('T')[0];
                 } else {
                     customRange.style.display = 'none';
-                    await fetchCalendarEvents(period);
+                    
+                    // Check if we're currently viewing a friend's calendar
+                    if (window.currentFriendId && window.currentFriendName) {
+                        // Fetch friend's calendar for the selected period
+                        await fetchFriendCalendarForPeriod(window.currentFriendId, window.currentFriendName, period);
+                    } else {
+                        // Fetch current user's calendar
+                        await fetchCalendarEvents(period);
+                    }
                 }
             });
         });
@@ -520,7 +530,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            await fetchCalendarEvents('custom', true, false, startDate, endDate);
+            // Check if we're currently viewing a friend's calendar
+            if (window.currentFriendId && window.currentFriendName) {
+                // Fetch friend's calendar for the custom date range
+                await fetchFriendCalendarForCustomRange(window.currentFriendId, window.currentFriendName, startDate, endDate);
+            } else {
+                // Fetch current user's calendar
+                await fetchCalendarEvents('custom', true, false, startDate, endDate);
+            }
         });
 
         return selectorDiv;
@@ -537,6 +554,11 @@ document.addEventListener('DOMContentLoaded', () => {
         calendarEventsDiv.innerHTML = '';
         calendarEventsDiv.appendChild(timeSelector);
         
+        // Add back button if viewing friend's calendar
+        if (window.currentFriendId && window.currentFriendName) {
+            addBackToMyScheduleButton();
+        }
+        
         const noEventsDiv = document.createElement('div');
         noEventsDiv.className = 'no-events';
         noEventsDiv.innerHTML = `
@@ -551,9 +573,47 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add event listener for the refresh button
         document.getElementById('refresh-btn').addEventListener('click', async () => {
             console.log('Refresh button clicked');
-            const success = await refreshCalendar();
-            if (success) {
-                await fetchCalendarEvents(period, true, false);
+            
+            // Check if we're currently viewing a friend's calendar
+            if (window.currentFriendId && window.currentFriendName) {
+                // For friend's calendar, force sync their Google Calendar first, then refetch events
+                try {
+                    const token = localStorage.getItem('jwt_token');
+                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                    
+                    // Force sync friend's calendars
+                    const syncResponse = await fetch(`${API_BASE_URL}/friends/${window.currentFriendId}/sync`, {
+                        method: 'POST',
+                        headers
+                    });
+                    
+                    if (syncResponse.ok) {
+                        const syncData = await syncResponse.json();
+                        if (syncData.success) {
+                            showSuccessMessage('Friend\'s calendar synced successfully!');
+                        } else {
+                            showErrorMessage('Failed to sync friend\'s calendar');
+                        }
+                    } else {
+                        showErrorMessage('Failed to sync friend\'s calendar');
+                    }
+                } catch (error) {
+                    console.error('Failed to sync friend calendar:', error);
+                    showErrorMessage('Failed to sync friend\'s calendar');
+                }
+                
+                // Get current period from the active button
+                const activePeriodBtn = document.querySelector('.period-btn.active');
+                const currentPeriod = activePeriodBtn ? activePeriodBtn.dataset.period : 'today';
+                
+                // Refetch friend's events after sync
+                await fetchFriendCalendarForPeriod(window.currentFriendId, window.currentFriendName, currentPeriod);
+            } else {
+                // For current user's calendar, refresh and then fetch events
+                const success = await refreshCalendar();
+                if (success) {
+                    await fetchCalendarEvents(period, true, false);
+                }
             }
         });
     };
@@ -573,6 +633,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         calendarEventsDiv.innerHTML = '';
         calendarEventsDiv.appendChild(timeSelector);
+        
+        // Add back button if viewing friend's calendar
+        if (window.currentFriendId && window.currentFriendName) {
+            addBackToMyScheduleButton();
+        }
         
         const headerDiv = document.createElement('div');
         headerDiv.className = 'calendar-header';
@@ -618,9 +683,47 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add event listener for the refresh button
         document.getElementById('refresh-btn').addEventListener('click', async () => {
             console.log('Refresh button clicked');
-            const success = await refreshCalendar();
-            if (success) {
-                await fetchCalendarEvents(period, true, false);
+            
+            // Check if we're currently viewing a friend's calendar
+            if (window.currentFriendId && window.currentFriendName) {
+                // For friend's calendar, force sync their Google Calendar first, then refetch events
+                try {
+                    const token = localStorage.getItem('jwt_token');
+                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                    
+                    // Force sync friend's calendars
+                    const syncResponse = await fetch(`${API_BASE_URL}/friends/${window.currentFriendId}/sync`, {
+                        method: 'POST',
+                        headers
+                    });
+                    
+                    if (syncResponse.ok) {
+                        const syncData = await syncResponse.json();
+                        if (syncData.success) {
+                            showSuccessMessage('Friend\'s calendar synced successfully!');
+                        } else {
+                            showErrorMessage('Failed to sync friend\'s calendar');
+                        }
+                    } else {
+                        showErrorMessage('Failed to sync friend\'s calendar');
+                    }
+                } catch (error) {
+                    console.error('Failed to sync friend calendar:', error);
+                    showErrorMessage('Failed to sync friend\'s calendar');
+                }
+                
+                // Get current period from the active button
+                const activePeriodBtn = document.querySelector('.period-btn.active');
+                const currentPeriod = activePeriodBtn ? activePeriodBtn.dataset.period : 'today';
+                
+                // Refetch friend's events after sync
+                await fetchFriendCalendarForPeriod(window.currentFriendId, window.currentFriendName, currentPeriod);
+            } else {
+                // For current user's calendar, refresh and then fetch events
+                const success = await refreshCalendar();
+                if (success) {
+                    await fetchCalendarEvents(period, true, false);
+                }
             }
         });
     };
@@ -851,6 +954,258 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Add refresh button event listener
-    refreshBtn?.addEventListener('click', refreshCalendar);
+    async function renderFriendsInitials() {
+        const friendsSection = document.getElementById('friends-section');
+        if (!friendsSection) return;
+
+        // Remove any previous icons (but keep the title)
+        friendsSection.querySelectorAll('.friend-initials-list, .friend-icon').forEach(el => el.remove());
+
+        const list = document.createElement('div');
+        list.className = 'friend-initials-list';
+        list.style.display = 'flex';
+        list.style.flexDirection = 'column';
+        list.style.gap = '16px';
+        list.style.marginTop = '12px';
+
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            const response = await fetch('/api/friends', { headers });
+            const data = await response.json();
+            if (data.friends && data.friends.length > 0) {
+                data.friends.forEach(friend => {
+                    let initials = '?';
+                    if (friend.name && friend.name.length > 0) {
+                        const parts = friend.name.trim().split(' ');
+                        if (parts.length === 1) {
+                            initials = parts[0][0].toUpperCase();
+                        } else {
+                            initials = parts[0][0].toUpperCase() + parts[parts.length-1][0].toUpperCase();
+                        }
+                    }
+                    const icon = document.createElement('div');
+                    icon.className = 'friend-icon';
+                    icon.textContent = initials;
+                    icon.title = friend.name || friend.email;
+                    icon.style.cursor = 'pointer';
+                    
+                    // Add click functionality to show friend's calendar
+                    icon.addEventListener('click', () => {
+                        fetchFriendCalendar(friend.id, friend.name);
+                    });
+                    
+                    // Add custom tooltip functionality
+                    icon.addEventListener('mouseenter', (e) => {
+                        const tooltip = document.createElement('div');
+                        tooltip.className = 'custom-tooltip';
+                        tooltip.textContent = friend.name || friend.email;
+                        tooltip.style.position = 'absolute';
+                        tooltip.style.backgroundColor = '#333';
+                        tooltip.style.color = 'white';
+                        tooltip.style.padding = '8px 12px';
+                        tooltip.style.borderRadius = '6px';
+                        tooltip.style.fontSize = '14px';
+                        tooltip.style.zIndex = '1000';
+                        tooltip.style.pointerEvents = 'none';
+                        tooltip.style.whiteSpace = 'nowrap';
+                        tooltip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                        
+                        // Position tooltip above the icon
+                        const rect = icon.getBoundingClientRect();
+                        tooltip.style.left = rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2) + 'px';
+                        tooltip.style.top = rect.top - tooltip.offsetHeight - 8 + 'px';
+                        
+                        document.body.appendChild(tooltip);
+                        icon._tooltip = tooltip;
+                    });
+                    
+                    icon.addEventListener('mouseleave', () => {
+                        if (icon._tooltip) {
+                            icon._tooltip.remove();
+                            icon._tooltip = null;
+                        }
+                    });
+                    
+                    list.appendChild(icon);
+                });
+            } else {
+                const empty = document.createElement('div');
+                empty.className = 'empty-message';
+                empty.textContent = 'No friends yet';
+                list.appendChild(empty);
+            }
+            friendsSection.appendChild(list);
+        } catch (err) {
+            const error = document.createElement('div');
+            error.className = 'empty-message';
+            error.textContent = 'Failed to load friends';
+            friendsSection.appendChild(error);
+            console.error('Friends initials error:', err);
+        }
+    }
+
+    // Function to fetch and display friend's calendar for a specific period
+    const fetchFriendCalendarForPeriod = async (friendId, friendName, period) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            // Get date range for the period
+            const { startDate, endDate } = getDateRange(period);
+            
+            const response = await fetch(`${API_BASE_URL}/friends/${friendId}/calendar?start=${startDate.toISOString()}&end=${endDate.toISOString()}`, { headers });
+            const data = await response.json();
+
+            if (data.success) {
+                // Display friend's events
+                if (data.events && data.events.length > 0) {
+                    displayCalendarEvents(data.events, period, startDate, endDate);
+                } else {
+                    displayNoEvents(period, startDate, endDate);
+                }
+            } else {
+                showErrorMessage('Failed to load friend\'s calendar');
+            }
+        } catch (error) {
+            console.error('Failed to fetch friend calendar for period:', error);
+            showErrorMessage('Failed to load friend\'s calendar');
+        }
+    };
+
+    // Function to fetch and display friend's calendar for a custom date range
+    const fetchFriendCalendarForCustomRange = async (friendId, friendName, startDateStr, endDateStr) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            // Convert string dates to Date objects
+            const startDate = new Date(startDateStr);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(endDateStr);
+            endDate.setHours(23, 59, 59, 999);
+            
+            const response = await fetch(`${API_BASE_URL}/friends/${friendId}/calendar?start=${startDate.toISOString()}&end=${endDate.toISOString()}`, { headers });
+            const data = await response.json();
+
+            if (data.success) {
+                // Display friend's events
+                if (data.events && data.events.length > 0) {
+                    displayCalendarEvents(data.events, 'custom', startDate, endDate);
+                } else {
+                    displayNoEvents('custom', startDate, endDate);
+                }
+            } else {
+                showErrorMessage('Failed to load friend\'s calendar');
+            }
+        } catch (error) {
+            console.error('Failed to fetch friend calendar for custom range:', error);
+            showErrorMessage('Failed to load friend\'s calendar');
+        }
+    };
+
+    // Function to fetch and display friend's calendar
+    const fetchFriendCalendar = async (friendId, friendName) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            
+            // Get current date range
+            const { startDate, endDate } = getDateRange('today');
+            
+            const response = await fetch(`${API_BASE_URL}/friends/${friendId}/calendar?start=${startDate.toISOString()}&end=${endDate.toISOString()}`, { headers });
+            const data = await response.json();
+
+            if (data.success) {
+                // Update the header to show friend's name
+                const userNameSpan = document.getElementById('user-name');
+                if (userNameSpan) {
+                    userNameSpan.textContent = `${friendName}'s Schedule`;
+                }
+                
+                // Display friend's events
+                if (data.events && data.events.length > 0) {
+                    displayCalendarEvents(data.events, 'today', startDate, endDate);
+                } else {
+                    displayNoEvents('today', startDate, endDate);
+                }
+                
+                // Store current friend context for navigation
+                window.currentFriendId = friendId;
+                window.currentFriendName = friendName;
+                
+                // Add a "Back to My Schedule" button
+                addBackToMyScheduleButton();
+            } else {
+                showErrorMessage('Failed to load friend\'s calendar');
+            }
+        } catch (error) {
+            console.error('Failed to fetch friend calendar:', error);
+            showErrorMessage('Failed to load friend\'s calendar');
+        }
+    };
+
+    // Function to add "Back to My Schedule" button
+    const addBackToMyScheduleButton = () => {
+        const calendarEventsDiv = document.getElementById('calendar-events');
+        if (!calendarEventsDiv) return;
+
+        // Remove existing back button if any
+        const existingBackBtn = document.getElementById('back-to-my-schedule');
+        if (existingBackBtn) {
+            existingBackBtn.remove();
+        }
+
+        const backButton = document.createElement('button');
+        backButton.id = 'back-to-my-schedule';
+        backButton.textContent = '← Back to My Schedule';
+        backButton.style.cssText = `
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 16px;
+            font-size: 14px;
+        `;
+        
+        backButton.addEventListener('click', async () => {
+            // Clear friend context
+            window.currentFriendId = null;
+            window.currentFriendName = null;
+            
+            // Reset header with actual user name
+            const userNameSpan = document.getElementById('user-name');
+            if (userNameSpan) {
+                // Fetch current user info to get the actual name
+                try {
+                    const token = localStorage.getItem('jwt_token');
+                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                    const response = await fetch(`${API_BASE_URL}/auth/status`, { headers });
+                    const data = await response.json();
+                    
+                    if (data.authenticated && data.user && data.user.name) {
+                        userNameSpan.textContent = data.user.name;
+                    } else {
+                        userNameSpan.textContent = 'User';
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch user info:', error);
+                    userNameSpan.textContent = 'User';
+                }
+            }
+            
+            // Remove back button
+            backButton.remove();
+            
+            // Fetch and display user's own calendar
+            fetchCalendarEvents();
+        });
+
+        // Insert at the beginning of the calendar events div
+        calendarEventsDiv.insertBefore(backButton, calendarEventsDiv.firstChild);
+    };
+
+    renderFriendsInitials();
 }); 

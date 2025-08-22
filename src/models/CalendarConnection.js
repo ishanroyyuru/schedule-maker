@@ -102,6 +102,23 @@ class CalendarConnection {
     }
   }
 
+  static async updateLastSync(id) {
+    const query = `
+      UPDATE calendar_connections 
+      SET updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    
+    try {
+      const result = await db.query(query, [id]);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error updating last sync:', error);
+      throw new Error('Failed to update last sync');
+    }
+  }
+
   static async updateRefreshToken(oldRefreshToken, newRefreshToken) {
     const query = `
       UPDATE calendar_connections 
