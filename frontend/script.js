@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await fetchCalendarEvents();
                 await fetchCalendarConnections();
+                await fetchFriendsForSidebar(); // Add this line
             } else {
                 loginBtn.style.display = 'block';
                 logoutBtn.style.display = 'none';
@@ -852,5 +853,284 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Add refresh button event listener
-    refreshBtn?.addEventListener('click', refreshCalendar);
+    refreshBtn?.addEventListener('click', async () => {
+        // Only refresh if we're viewing our own calendar
+        if (currentFriendId === null) {
+            await refreshCalendar();
+        } else {
+            // If viewing a friend's calendar, refresh their calendar instead
+            await syncFriendCalendar(currentFriendId);
+        }
+    });
+
+    // Friend Calendar Functionality
+    let currentFriendId = null;
+    let currentFriendName = '';
+
+    const fetchFriendsForSidebar = async () => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+            
+            const response = await fetch(`${API_BASE_URL}/friends`, { headers });
+            const data = await response.json();
+            
+            const sidebarList = document.getElementById('friends-list-sidebar');
+            
+            if (data.friends && data.friends.length > 0) {
+                sidebarList.innerHTML = '';
+                data.friends.forEach(friend => {
+                    sidebarList.appendChild(createFriendSidebarItem(friend));
+                });
+            } else {
+                sidebarList.innerHTML = '<p class="empty-message">No friends added yet</p>';
+            }
+        } catch (error) {
+            console.error('Failed to fetch friends for sidebar:', error);
+        }
+    };
+
+    const createFriendSidebarItem = (friend) => {
+        const friendItem = document.createElement('div');
+        friendItem.className = 'friend-item-sidebar';
+        friendItem.dataset.friendId = friend.id;
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'friend-avatar-sidebar';
+        avatar.textContent = friend.name.charAt(0).toUpperCase();
+        
+        const name = document.createElement('div');
+        name.className = 'friend-name-sidebar';
+        name.textContent = friend.name;
+        
+        const syncBtn = document.createElement('button');
+        syncBtn.className = 'friend-sync-btn-sidebar';
+        syncBtn.textContent = '↻';
+        syncBtn.title = 'Sync friend calendar';
+        syncBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            // Show loading state
+            syncBtn.textContent = '⏳';
+            syncBtn.disabled = true;
+            
+            try {
+                await syncFriendCalendar(friend.id);
+            } finally {
+                // Restore button state
+                syncBtn.textContent = '↻';
+                syncBtn.disabled = false;
+            }
+        };
+        
+        friendItem.appendChild(avatar);
+        friendItem.appendChild(name);
+        friendItem.appendChild(syncBtn);
+        
+        friendItem.onclick = () => selectFriend(friend.id, friend.name);
+        
+        return friendItem;
+    };
+
+    const selectFriend = async (friendId, friendName) => {
+        // Update active state
+        document.querySelectorAll('.friend-item-sidebar').forEach(item => {
+            item.classList.remove('active');
+        });
+        document.querySelector(`[data-friend-id="${friendId}"]`).classList.add('active');
+        
+        currentFriendId = friendId;
+        currentFriendName = friendName;
+        
+        // Update calendar title
+        document.querySelector('.current-week').textContent = `${friendName}'s Week`;
+        
+        // Load friend's calendar
+        await loadFriendCalendar(friendId);
+    };
+
+    const loadFriendCalendar = async (friendId) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+            
+            // Get current week's Monday date (same as what the user is viewing)
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - daysToMonday);
+            monday.setHours(0, 0, 0, 0);
+            
+            console.log(`Loading friend ${friendId} calendar for week starting:`, monday.toISOString());
+            
+            const response = await fetch(
+                `${API_BASE_URL}/friends/${friendId}/calendar?period=week&date=${monday.toISOString()}`,
+                { headers }
+            );
+            
+            if (!response.ok) throw new Error('Failed to load friend calendar');
+            
+            const data = await response.json();
+            console.log('Friend calendar response:', data);
+            
+            if (data.success) {
+                // Transform events to match calendar format
+                const transformedEvents = data.events.map(event => ({
+                    ...event,
+                    start: new Date(event.startTime),
+                    end: new Date(event.endTime),
+                    title: event.title,
+                    calendarColor: event.calendarColor,
+                    calendarName: event.calendarName,
+                    location: event.location
+                }));
+                
+                console.log('Transformed events:', transformedEvents);
+                
+                // Update calendar with friend's events
+                updateCalendarWithEvents(transformedEvents);
+            } else {
+                console.error('Friend calendar load failed:', data);
+            }
+        } catch (error) {
+            console.error('Failed to load friend calendar:', error);
+            showErrorMessage('Failed to load friend calendar');
+        }
+    };
+
+    const syncFriendCalendar = async (friendId) => {
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+            
+            // First, sync the friend's calendar
+            const response = await fetch(`${API_BASE_URL}/friends/${friendId}/sync`, {
+                method: 'POST',
+                headers
+            });
+            
+            if (!response.ok) throw new Error('Failed to sync friend calendar');
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showSuccessMessage('Friend calendar synced successfully');
+                
+                // Always reload the friend's calendar if they are currently selected
+                if (currentFriendId === friendId) {
+                    await loadFriendCalendar(friendId);
+                }
+            } else {
+                showErrorMessage(data.message || 'Failed to sync friend calendar');
+            }
+        } catch (error) {
+            console.error('Failed to sync friend calendar:', error);
+            showErrorMessage('Failed to sync friend calendar');
+        }
+    };
+
+    const updateCalendarWithEvents = (events) => {
+        console.log('Updating calendar with events:', events);
+        
+        // Clear existing events
+        document.querySelectorAll('.calendar-day').forEach(day => {
+            // Keep the header but clear the events list
+            const header = day.querySelector('.calendar-day-header');
+            day.innerHTML = '';
+            if (header) {
+                day.appendChild(header);
+            }
+        });
+        
+        // Add events to calendar with proper formatting
+        events.forEach(event => {
+            const eventDate = new Date(event.start);
+            const dayOfWeek = eventDate.getDay();
+            const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday=0, Sunday=6
+            
+            console.log(`Event "${event.title}" on day ${dayOfWeek} (index ${dayIndex})`);
+            
+            const dayElement = document.querySelectorAll('.calendar-day')[dayIndex];
+            if (dayElement) {
+                // Create events list if it doesn't exist
+                let eventsList = dayElement.querySelector('.calendar-events-list');
+                if (!eventsList) {
+                    eventsList = document.createElement('ul');
+                    eventsList.className = 'calendar-events-list';
+                    dayElement.appendChild(eventsList);
+                }
+                
+                const eventItem = document.createElement('li');
+                eventItem.className = 'calendar-event';
+                eventItem.style.borderLeftColor = event.calendarColor || '#4285f4';
+                eventItem.innerHTML = `
+                    <div class="calendar-event-time">${formatTime(new Date(event.start))}</div>
+                    <div class="calendar-event-title">${event.title}</div>
+                `;
+                
+                // Add tooltip with more details
+                const tooltip = document.createElement('div');
+                tooltip.className = 'event-tooltip';
+                tooltip.innerHTML = `
+                    <strong>${event.title}</strong><br>
+                    Time: ${formatTime(new Date(event.start))} - ${formatTime(new Date(event.end))}<br>
+                    ${event.location ? `Location: ${event.location}<br>` : ''}
+                    Calendar: ${event.calendarName || 'Friend Calendar'}
+                `;
+                eventItem.appendChild(tooltip);
+                
+                eventsList.appendChild(eventItem);
+                console.log(`Added event "${event.title}" to day ${dayIndex}`);
+            } else {
+                console.error(`Day element not found for index ${dayIndex}`);
+            }
+        });
+    };
+
+    // Add function to show my calendar
+    const showMyCalendar = () => {
+        currentFriendId = null;
+        currentFriendName = '';
+        
+        // Update calendar title
+        document.querySelector('.current-week').textContent = 'Current Week';
+        
+        // Clear active friend selection
+        document.querySelectorAll('.friend-item-sidebar').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // Get current week start (Monday)
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - daysToMonday);
+        monday.setHours(0, 0, 0, 0);
+        
+        // Restore my calendar view
+        updateCalendarGrid(monday);
+    };
+
+    // Add "My Calendar" button to sidebar
+    const addMyCalendarButton = () => {
+        const sidebar = document.getElementById('friends-sidebar');
+        const myCalendarBtn = document.createElement('div');
+        myCalendarBtn.className = 'friend-item-sidebar my-calendar-btn';
+        myCalendarBtn.innerHTML = `
+            <div class="friend-avatar-sidebar" style="background: #e74c3c;">M</div>
+            <div class="friend-name-sidebar">My Calendar</div>
+        `;
+        myCalendarBtn.onclick = showMyCalendar;
+        
+        // Insert at the top
+        const friendsList = document.getElementById('friends-list-sidebar');
+        sidebar.insertBefore(myCalendarBtn, friendsList);
+    };
+
+    // Initialize my calendar button
+    addMyCalendarButton();
 }); 

@@ -81,6 +81,116 @@ main {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+/* Calendar Layout */
+.calendar-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+/* Friends Sidebar */
+.friends-sidebar {
+    width: 250px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    border: 1px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.friends-sidebar h3 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    font-size: 1.2rem;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 0.5rem;
+}
+
+.friends-list-sidebar {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.friend-item-sidebar {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.friend-item-sidebar:hover {
+    background: #e3f2fd;
+    border-color: #3498db;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+}
+
+.friend-item-sidebar.active {
+    background: #3498db;
+    color: white;
+    border-color: #2980b9;
+}
+
+.friend-avatar-sidebar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3498db;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+}
+
+.friend-name-sidebar {
+    font-weight: 500;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-sync-btn-sidebar {
+    background: #27ae60;
+    color: white;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.friend-sync-btn-sidebar:hover {
+    background: #229954;
+}
+
+.my-calendar-btn {
+    background: #e74c3c !important;
+    color: white !important;
+    border-color: #c0392b !important;
+    margin-bottom: 1rem;
+}
+
+.my-calendar-btn:hover {
+    background: #c0392b !important;
+    border-color: #a93226 !important;
+}
+
+/* Calendar Main Area */
+.calendar-main {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Button styles */
 .btn {
     background-color: #3498db;

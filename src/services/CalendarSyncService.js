@@ -5,11 +5,26 @@ const User = require('../models/User');
 
 class CalendarSyncService {
   constructor() {
-    this.googleAuth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
+    // Remove the global OAuth2 client - we'll create user-specific ones
+    this.clientId = process.env.GOOGLE_CLIENT_ID;
+    this.clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    this.redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  }
+
+  // Create a user-specific OAuth2 client
+  createUserOAuth2Client(connection) {
+    const oauth2Client = new google.auth.OAuth2(
+      this.clientId,
+      this.clientSecret,
+      this.redirectUri
     );
+    
+    oauth2Client.setCredentials({
+      access_token: connection.access_token,
+      refresh_token: connection.refresh_token
+    });
+    
+    return oauth2Client;
   }
 
   // ---- helpers -------------------------------------------------------------
@@ -155,12 +170,7 @@ class CalendarSyncService {
       }
 
       console.log('Setting up Google Calendar API...');
-      this.googleAuth.setCredentials({
-        access_token: connection.access_token,
-        refresh_token: connection.refresh_token
-      });
-
-      const calendar = google.calendar({ version: 'v3', auth: this.googleAuth });
+      const calendar = google.calendar({ version: 'v3', auth: this.createUserOAuth2Client(connection) });
 
       const now = new Date();
       const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -253,10 +263,10 @@ class CalendarSyncService {
     }
 
     try {
-      this.googleAuth.setCredentials({ refresh_token: connection.refresh_token });
+      const oauth2Client = this.createUserOAuth2Client(connection);
 
       // refreshAccessToken() returns {credentials} (promise form in google-auth-library)
-      const { credentials } = await this.googleAuth.refreshAccessToken();
+      const { credentials } = await oauth2Client.refreshAccessToken();
 
       await CalendarConnection.updateAccessToken(
         connection.id,
@@ -366,12 +376,7 @@ class CalendarSyncService {
 
       await this.refreshTokenIfNeeded(primaryConnection);
 
-      this.googleAuth.setCredentials({
-        access_token: primaryConnection.access_token,
-        refresh_token: primaryConnection.refresh_token
-      });
-
-      const calendar = google.calendar({ version: 'v3', auth: this.googleAuth });
+      const calendar = google.calendar({ version: 'v3', auth: this.createUserOAuth2Client(primaryConnection) });
 
       const googleEvent = await calendar.events.insert({
         calendarId: primaryConnection.calendar_id,
@@ -417,12 +422,7 @@ class CalendarSyncService {
 
       await this.refreshTokenIfNeeded(connections[0]);
 
-      this.googleAuth.setCredentials({
-        access_token: connections[0].access_token,
-        refresh_token: connections[0].refresh_token
-      });
-
-      const calendar = google.calendar({ version: 'v3', auth: this.googleAuth });
+      const calendar = google.calendar({ version: 'v3', auth: this.createUserOAuth2Client(connections[0]) });
 
       const googleEvent = await calendar.events.update({
         calendarId: connections[0].calendar_id,
@@ -469,12 +469,7 @@ class CalendarSyncService {
 
       await this.refreshTokenIfNeeded(connections[0]);
 
-      this.googleAuth.setCredentials({
-        access_token: connections[0].access_token,
-        refresh_token: connections[0].refresh_token
-      });
-
-      const calendar = google.calendar({ version: 'v3', auth: this.googleAuth });
+      const calendar = google.calendar({ version: 'v3', auth: this.createUserOAuth2Client(connections[0]) });
 
       await calendar.events.delete({
         calendarId: connections[0].calendar_id,

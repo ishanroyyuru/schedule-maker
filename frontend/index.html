@@ -23,27 +23,38 @@
                     <h2>Welcome, <span id="user-name">User</span>!</h2>
                 </div>
 
-                <div id="calendar-events">
-                    <div class="calendar-grid">
-                        <div class="calendar-navigation">
-                            <button id="prev-week">← Previous Week</button>
-                            <span class="current-week">Current Week</span>
-                            <button id="next-week">Next Week →</button>
-                            <button id="refresh-btn" class="sync-btn">
-                                <span class="sync-icon">↻</span> Refresh
-                            </button>
+                <div class="calendar-layout">
+                    <!-- Friends Sidebar -->
+                    <div id="friends-sidebar" class="friends-sidebar">
+                        <h3>Friends</h3>
+                        <div id="friends-list-sidebar" class="friends-list-sidebar">
+                            <p class="empty-message">No friends added yet</p>
                         </div>
-                        <div class="calendar-header-row">
-                            <div class="calendar-header-cell">Mon</div>
-                            <div class="calendar-header-cell">Tue</div>
-                            <div class="calendar-header-cell">Wed</div>
-                            <div class="calendar-header-cell">Thu</div>
-                            <div class="calendar-header-cell">Fri</div>
-                            <div class="calendar-header-cell">Sat</div>
-                            <div class="calendar-header-cell">Sun</div>
-                        </div>
-                        <div class="calendar-body">
-                            <!-- Calendar days will be dynamically inserted here -->
+                    </div>
+
+                    <!-- Main Calendar Area -->
+                    <div id="calendar-events" class="calendar-main">
+                        <div class="calendar-grid">
+                            <div class="calendar-navigation">
+                                <button id="prev-week">← Previous Week</button>
+                                <span class="current-week">Current Week</span>
+                                <button id="next-week">Next Week →</button>
+                                <button id="refresh-btn" class="sync-btn">
+                                    <span class="sync-icon">↻</span> Refresh
+                                </button>
+                            </div>
+                            <div class="calendar-header-row">
+                                <div class="calendar-header-cell">Mon</div>
+                                <div class="calendar-header-cell">Tue</div>
+                                <div class="calendar-header-cell">Wed</div>
+                                <div class="calendar-header-cell">Thu</div>
+                                <div class="calendar-header-cell">Fri</div>
+                                <div class="calendar-header-cell">Sat</div>
+                                <div class="calendar-header-cell">Sun</div>
+                            </div>
+                            <div class="calendar-body">
+                                <!-- Calendar days will be dynamically inserted here -->
+                            </div>
                         </div>
                     </div>
                 </div>
