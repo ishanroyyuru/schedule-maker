@@ -50,9 +50,30 @@
                   <label>Name:</label>
                   <span id="profile-name"></span>
                 </div>
-                <div class="info-group">
-                  <label>Email:</label>
-                  <span id="profile-email"></span>
+
+                <div id="calendar-events">
+                    <div class="calendar-grid">
+                        <div class="calendar-navigation">
+                            <button id="prev-week">← Previous Week</button>
+                            <span class="current-week">Current Week</span>
+                            <button id="next-week">Next Week →</button>
+                            <button id="refresh-btn" class="sync-btn">
+                                <span class="sync-icon">↻</span> Refresh
+                            </button>
+                        </div>
+                        <div class="calendar-header-row">
+                            <div class="calendar-header-cell">Mon</div>
+                            <div class="calendar-header-cell">Tue</div>
+                            <div class="calendar-header-cell">Wed</div>
+                            <div class="calendar-header-cell">Thu</div>
+                            <div class="calendar-header-cell">Fri</div>
+                            <div class="calendar-header-cell">Sat</div>
+                            <div class="calendar-header-cell">Sun</div>
+                        </div>
+                        <div class="calendar-body">
+                            <!-- Calendar days will be dynamically inserted here -->
+                        </div>
+                    </div>
                 </div>
                 <div class="info-group">
                   <label>Timezone:</label>
